@@ -12,4 +12,5 @@ CREATE INDEX IF NOT EXISTS idx_tax_revenues_company_month ON tax_revenues(compan
 CREATE TABLE IF NOT EXISTS tax_payments (id UUID PRIMARY KEY,company_id UUID NOT NULL REFERENCES tax_companies(id) ON DELETE CASCADE,reference_month DATE NOT NULL,amount NUMERIC(14,2) NOT NULL CHECK(amount>=0),tax_code TEXT,paid_at DATE,created_at TIMESTAMPTZ NOT NULL DEFAULT now());
 CREATE INDEX IF NOT EXISTS idx_tax_payments_company_month ON tax_payments(company_id,reference_month DESC);
 CREATE TABLE IF NOT EXISTS tax_obligations (id UUID PRIMARY KEY,company_id UUID NOT NULL REFERENCES tax_companies(id) ON DELETE CASCADE,code TEXT NOT NULL,name TEXT NOT NULL,due_date DATE NOT NULL,status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','done','overdue')),notes TEXT);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_tax_obligations_company_code_due ON tax_obligations(company_id,code,due_date);
 CREATE INDEX IF NOT EXISTS idx_tax_obligations_company_due ON tax_obligations(company_id,due_date);
