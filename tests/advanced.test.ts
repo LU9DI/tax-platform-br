@@ -1,0 +1,2 @@
+import { test } from "node:test"; import assert from "node:assert/strict"; import { calculateMeiLoad } from "../src/services/taxService.js";
+test("calculates MEI load indicators",()=>{const x=calculateMeiLoad({revenueYearToDate:65000,month:9,activity:"services"});assert.equal(x.annualLimit,81000);assert.ok(x.percentageUsed>80);assert.ok(x.alerts.includes("revenue_above_80_percent_of_limit"));});
