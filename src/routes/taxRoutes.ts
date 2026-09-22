@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { randomUUID } from "node:crypto";
-import { prepareTaxProfile, simulateConsumptionTransition } from "../services/taxService.js";
+import { prepareTaxProfile, simulateConsumptionTransition, calculateMeiLoad } from "../services/taxService.js";
 import { initDb } from "../core/db.js";
 import { requireAuth } from "../middleware/auth.js";
 const router=Router();
@@ -10,6 +10,8 @@ router.post("/profile",requireAuth,async(req,res)=>{try{const p=prepareTaxProfil
 router.get("/profiles",requireAuth,async(req,res)=>{try{const r=await initDb().query("SELECT id,taxpayer_type,country,state,tax_year,data,created_at,updated_at FROM tax_profiles WHERE user_id=$1 ORDER BY tax_year DESC",[(req as any).userId]);res.json({profiles:r.rows});}catch{res.status(500).json({error:"failed to load tax profiles"});}});
 
 router.post("/profile/validate",requireAuth,(req,res)=>{try{res.json({valid:true,profile:prepareTaxProfile(req.body)});}catch(e){res.status(400).json({valid:false,error:e instanceof Error?e.message:"invalid tax profile"});}});
+
+router.post("/mei/load",requireAuth,(req,res)=>{try{res.json(calculateMeiLoad(req.body));}catch(e){res.status(400).json({error:e instanceof Error?e.message:"invalid MEI data"});}});
 
 router.post("/simulate/consumption-transition",requireAuth,(req,res)=>{try{res.json(simulateConsumptionTransition({base:Number(req.body?.base),year:Number(req.body?.year)}));}catch(e){res.status(400).json({error:e instanceof Error?e.message:"invalid simulation"});}});
 
