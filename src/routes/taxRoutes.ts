@@ -1,5 +1,4 @@
-import { Router } from "express";
-import { validateTaxProfile } from "../domain/tax.js";
+import { Router } from "express"; import { prepareTaxProfile } from "../services/taxService.js";
 const router=Router();
-router.post("/profile/validate",(req,res)=>{try{validateTaxProfile(req.body);res.json({valid:true});}catch(error){res.status(400).json({valid:false,error:error instanceof Error?error.message:"invalid tax profile"});}});
+router.post("/profile/validate",(req,res)=>{try{res.json({valid:true,profile:prepareTaxProfile(req.body)});}catch(e){res.status(400).json({valid:false,error:e instanceof Error?e.message:"invalid tax profile"});}});
 export default router;
