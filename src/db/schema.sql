@@ -1,30 +1,15 @@
-CREATE TABLE IF NOT EXISTS app_users (
-  id UUID PRIMARY KEY, email TEXT UNIQUE NOT NULL, password_hash TEXT NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
+CREATE TABLE IF NOT EXISTS app_users (id UUID PRIMARY KEY,email TEXT UNIQUE NOT NULL,password_hash TEXT NOT NULL,created_at TIMESTAMPTZ NOT NULL DEFAULT now());
 ALTER TABLE app_users ADD COLUMN IF NOT EXISTS password_hash TEXT;
 CREATE INDEX IF NOT EXISTS idx_app_users_email ON app_users(email);
-
-CREATE TABLE IF NOT EXISTS tax_profiles (
-  id UUID PRIMARY KEY, user_id UUID NOT NULL REFERENCES app_users(id) ON DELETE CASCADE,
-  taxpayer_type TEXT NOT NULL CHECK (taxpayer_type IN ('individual','accountant','business')),
-  country TEXT NOT NULL DEFAULT 'BR', state TEXT, tax_year INTEGER NOT NULL,
-  data JSONB NOT NULL DEFAULT '{}'::jsonb,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now(), updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  UNIQUE(user_id,tax_year)
-);
+CREATE TABLE IF NOT EXISTS tax_profiles (id UUID PRIMARY KEY,user_id UUID NOT NULL REFERENCES app_users(id) ON DELETE CASCADE,taxpayer_type TEXT NOT NULL CHECK(taxpayer_type IN ('individual','accountant','business')),country TEXT NOT NULL DEFAULT 'BR',state TEXT,tax_year INTEGER NOT NULL,data JSONB NOT NULL DEFAULT '{}'::jsonb,created_at TIMESTAMPTZ NOT NULL DEFAULT now(),updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),UNIQUE(user_id,tax_year));
 CREATE INDEX IF NOT EXISTS idx_tax_profiles_user_year ON tax_profiles(user_id,tax_year DESC);
-
-CREATE TABLE IF NOT EXISTS tax_rules (
-  id UUID PRIMARY KEY,
-  tax_year INTEGER NOT NULL,
-  code TEXT NOT NULL,
-  name TEXT NOT NULL,
-  version TEXT NOT NULL,
-  source_url TEXT NOT NULL,
-  source_reference TEXT NOT NULL,
-  parameters JSONB NOT NULL,
-  active BOOLEAN NOT NULL DEFAULT true,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  UNIQUE(tax_year,code,version)
-);
+CREATE TABLE IF NOT EXISTS tax_rules (id UUID PRIMARY KEY,tax_year INTEGER NOT NULL,code TEXT NOT NULL,name TEXT NOT NULL,version TEXT NOT NULL,source_url TEXT NOT NULL,source_reference TEXT NOT NULL,parameters JSONB NOT NULL,active BOOLEAN NOT NULL DEFAULT true,created_at TIMESTAMPTZ NOT NULL DEFAULT now(),UNIQUE(tax_year,code,version));
 CREATE INDEX IF NOT EXISTS idx_tax_rules_year_active ON tax_rules(tax_year,active);
+CREATE TABLE IF NOT EXISTS tax_companies (id UUID PRIMARY KEY,user_id UUID NOT NULL REFERENCES app_users(id) ON DELETE CASCADE,legal_name TEXT NOT NULL,cnpj TEXT,regime TEXT NOT NULL CHECK(regime IN ('mei','simples','other')),state TEXT,city TEXT,activity TEXT,opened_at DATE,created_at TIMESTAMPTZ NOT NULL DEFAULT now(),updated_at TIMESTAMPTZ NOT NULL DEFAULT now());
+CREATE INDEX IF NOT EXISTS idx_tax_companies_user ON tax_companies(user_id,updated_at DESC);
+CREATE TABLE IF NOT EXISTS tax_revenues (id UUID PRIMARY KEY,company_id UUID NOT NULL REFERENCES tax_companies(id) ON DELETE CASCADE,reference_month DATE NOT NULL,amount NUMERIC(14,2) NOT NULL CHECK(amount>=0),source TEXT NOT NULL DEFAULT 'manual',notes TEXT,created_at TIMESTAMPTZ NOT NULL DEFAULT now(),UNIQUE(company_id,reference_month));
+CREATE INDEX IF NOT EXISTS idx_tax_revenues_company_month ON tax_revenues(company_id,reference_month DESC);
+CREATE TABLE IF NOT EXISTS tax_payments (id UUID PRIMARY KEY,company_id UUID NOT NULL REFERENCES tax_companies(id) ON DELETE CASCADE,reference_month DATE NOT NULL,amount NUMERIC(14,2) NOT NULL CHECK(amount>=0),tax_code TEXT,paid_at DATE,created_at TIMESTAMPTZ NOT NULL DEFAULT now());
+CREATE INDEX IF NOT EXISTS idx_tax_payments_company_month ON tax_payments(company_id,reference_month DESC);
+CREATE TABLE IF NOT EXISTS tax_obligations (id UUID PRIMARY KEY,company_id UUID NOT NULL REFERENCES tax_companies(id) ON DELETE CASCADE,code TEXT NOT NULL,name TEXT NOT NULL,due_date DATE NOT NULL,status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','done','overdue')),notes TEXT);
+CREATE INDEX IF NOT EXISTS idx_tax_obligations_company_due ON tax_obligations(company_id,due_date);
