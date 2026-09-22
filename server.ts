@@ -6,6 +6,7 @@ import paymentRoutes from "./src/routes/paymentRoutes.js";
 import dashboardRoutes from "./src/routes/dashboardRoutes.js";
 import obligationRoutes from "./src/routes/obligationRoutes.js";
 import express from "express";
+import acquisitionRoutes from "./src/routes/acquisitionRoutes.js";
 import cors from "cors";
 import { initDb } from "./src/core/db.js";
 import { metricsMiddleware, metricsSnapshot } from "./src/core/metrics.js";
