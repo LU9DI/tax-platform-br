@@ -42,6 +42,8 @@ app.use("/api/payments", paymentRoutes);
 app.use("/api/dashboard", dashboardRoutes);
 app.use("/api/obligations", obligationRoutes);
 
+app.use("/api/acquisition", acquisitionRoutes);
+
 app.get("/api/health", async (_req, res) => {
   try { await initDb().query("SELECT 1"); res.json({ ok: true, service: "tax-platform-br", database: "ok" }); }
   catch { res.status(503).json({ ok: false, database: "error" }); }
