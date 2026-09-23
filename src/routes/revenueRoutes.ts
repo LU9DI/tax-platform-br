@@ -6,6 +6,8 @@ const router=Router();
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const MONTH=/^\d{4}-(0[1-9]|1[0-2])$/;
 const MAX_AMOUNT=1_000_000_000;
+const parseLimit=(v:unknown)=>{const n=Number(v??20);return Number.isInteger(n)&&n>=1&&n<=100?n:20;};
+const parseOffset=(v:unknown)=>{const n=Number(v??0);return Number.isInteger(n)&&n>=0&&n<=100000?n:0;};
 router.post("/:companyId",requireAuth,async(req,res)=>{try{
  if(!UUID.test(String(req.params.companyId)))return res.status(400).json({error:"invalid company id"});
  const amount=Number(req.body?.amount);if(!Number.isFinite(amount)||amount<0||amount>MAX_AMOUNT)return res.status(400).json({error:"invalid amount"});
@@ -16,5 +18,5 @@ router.post("/:companyId",requireAuth,async(req,res)=>{try{
  const id=randomUUID();const r=await db.query("INSERT INTO tax_revenues (id,company_id,reference_month,amount,source,notes) VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT(company_id,reference_month) DO UPDATE SET amount=EXCLUDED.amount,source=EXCLUDED.source,notes=EXCLUDED.notes RETURNING id,amount,reference_month,source,notes", [id,req.params.companyId,referenceMonth,amount,source,notes??null]);
  res.status(201).json({ok:true,revenue:r.rows[0],upserted:true});
 }catch{res.status(400).json({error:"failed to save revenue"});}});
-router.get("/:companyId",requireAuth,async(req,res)=>{try{if(!UUID.test(String(req.params.companyId)))return res.status(400).json({error:"invalid company id"});const db=initDb();const c=await db.query("SELECT id FROM tax_companies WHERE id=$1 AND user_id=$2",[req.params.companyId,(req as any).userId]);if(!c.rowCount)return res.status(404).json({error:"company not found"});const r=await db.query("SELECT id,reference_month,amount,source,notes,created_at FROM tax_revenues WHERE company_id=$1 ORDER BY reference_month DESC LIMIT 60",[req.params.companyId]);res.json({revenues:r.rows});}catch{res.status(500).json({error:"failed to load revenue"});}});
+router.get("/:companyId",requireAuth,async(req,res)=>{try{if(!UUID.test(String(req.params.companyId)))return res.status(400).json({error:"invalid company id"});const db=initDb();const c=await db.query("SELECT id FROM tax_companies WHERE id=$1 AND user_id=$2",[req.params.companyId,(req as any).userId]);if(!c.rowCount)return res.status(404).json({error:"company not found"});const limit=parseLimit(req.query.limit),offset=parseOffset(req.query.offset);const r=await db.query("SELECT id,reference_month,amount,source,notes,created_at FROM tax_revenues WHERE company_id=$1 ORDER BY reference_month DESC LIMIT $2 OFFSET $3",[req.params.companyId,limit,offset]);const count=await db.query("SELECT COUNT(*)::int count FROM tax_revenues WHERE company_id=$1",[req.params.companyId]);res.json({revenues:r.rows,pagination:{limit,offset,total:Number(count.rows[0].count),hasMore:offset+r.rows.length<Number(count.rows[0].count)}});}catch{res.status(500).json({error:"failed to load revenue"});}});
 export default router;
