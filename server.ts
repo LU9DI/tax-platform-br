@@ -1,5 +1,6 @@
 import acquisitionAutomationRoutes from "./src/routes/acquisitionAutomationRoutes.js";
 import authRoutes from "./src/routes/authRoutes.js";
+import platformRoutes from "./src/routes/platformRoutes.js";
 import taxRoutes from "./src/routes/taxRoutes.js";
 import companyRoutes from "./src/routes/companyRoutes.js";
 import revenueRoutes from "./src/routes/revenueRoutes.js";
@@ -44,6 +45,7 @@ app.use((_req, res, next) => {
 app.use(metricsMiddleware);
 
 app.use("/api/auth", authRoutes);
+app.use("/api/platform", platformRoutes);
 app.use("/api/tax", taxRoutes);
 app.use("/api/companies", companyRoutes);
 app.use("/api/revenue", revenueRoutes);
