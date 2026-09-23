@@ -1,8 +1,19 @@
 import { Router } from "express";
-import { randomUUID } from "node:crypto";
-import { initDb } from "../core/db.js";
 import { requireAuth } from "../middleware/auth.js";
+import { initDb } from "../core/db.js";
 const router=Router();
-router.post("/:companyId",requireAuth,async(req,res)=>{try{const amount=Number(req.body?.amount);if(!Number.isFinite(amount)||amount<0)return res.status(400).json({error:"amount must be non-negative"});const c=await initDb().query("SELECT id FROM tax_companies WHERE id=$1 AND user_id=$2",[req.params.companyId,(req as any).userId]);if(!c.rowCount)return res.status(404).json({error:"company not found"});const id=randomUUID();await initDb().query("INSERT INTO tax_revenues (id,company_id,reference_month,amount,source,notes) VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT(company_id,reference_month) DO UPDATE SET amount=EXCLUDED.amount,source=EXCLUDED.source,notes=EXCLUDED.notes",[id,req.params.companyId,req.body?.referenceMonth,amount,req.body?.source||"manual",req.body?.notes||null]);res.status(201).json({ok:true});}catch{res.status(400).json({error:"failed to save revenue"});}});
-router.get("/:companyId",requireAuth,async(req,res)=>{try{const c=await initDb().query("SELECT id FROM tax_companies WHERE id=$1 AND user_id=$2",[req.params.companyId,(req as any).userId]);if(!c.rowCount)return res.status(404).json({error:"company not found"});const r=await initDb().query("SELECT id,reference_month,amount,source,notes,created_at FROM tax_revenues WHERE company_id=$1 ORDER BY reference_month DESC LIMIT 60",[req.params.companyId]);res.json({revenues:r.rows});}catch{res.status(500).json({error:"failed to load revenue"});}});
+const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const MONTH=/^\d{4}-(0[1-9]|1[0-2])$/;
+const MAX_AMOUNT=1_000_000_000;
+router.post("/:companyId",requireAuth,async(req,res)=>{try{
+ if(!UUID.test(String(req.params.companyId)))return res.status(400).json({error:"invalid company id"});
+ const amount=Number(req.body?.amount);if(!Number.isFinite(amount)||amount<0||amount>MAX_AMOUNT)return res.status(400).json({error:"invalid amount"});
+ const referenceMonth=req.body?.referenceMonth;if(typeof referenceMonth!=="string"||!MONTH.test(referenceMonth))return res.status(400).json({error:"invalid reference month"});
+ const source=req.body?.source??"manual";if(typeof source!=="string"||source.length>100)return res.status(400).json({error:"invalid source"});
+ const notes=req.body?.notes;if(notes!==undefined&&notes!==null&&(typeof notes!=="string"||notes.length>5000))return res.status(400).json({error:"invalid notes"});
+ const db=initDb();const c=await db.query("SELECT id FROM tax_companies WHERE id=$1 AND user_id=$2",[req.params.companyId,(req as any).userId]);if(!c.rowCount)return res.status(404).json({error:"company not found"});
+ const id=randomUUID();const r=await db.query("INSERT INTO tax_revenues (id,company_id,reference_month,amount,source,notes) VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT(company_id,reference_month) DO UPDATE SET amount=EXCLUDED.amount,source=EXCLUDED.source,notes=EXCLUDED.notes RETURNING id,amount,reference_month,source,notes", [id,req.params.companyId,referenceMonth,amount,source,notes??null]);
+ res.status(201).json({ok:true,revenue:r.rows[0],upserted:true});
+}catch{res.status(400).json({error:"failed to save revenue"});}});
+router.get("/:companyId",requireAuth,async(req,res)=>{try{if(!UUID.test(String(req.params.companyId)))return res.status(400).json({error:"invalid company id"});const db=initDb();const c=await db.query("SELECT id FROM tax_companies WHERE id=$1 AND user_id=$2",[req.params.companyId,(req as any).userId]);if(!c.rowCount)return res.status(404).json({error:"company not found"});const r=await db.query("SELECT id,reference_month,amount,source,notes,created_at FROM tax_revenues WHERE company_id=$1 ORDER BY reference_month DESC LIMIT 60",[req.params.companyId]);res.json({revenues:r.rows});}catch{res.status(500).json({error:"failed to load revenue"});}});
 export default router;
