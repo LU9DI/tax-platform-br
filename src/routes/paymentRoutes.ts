@@ -3,5 +3,22 @@ import { randomUUID } from "node:crypto";
 import { initDb } from "../core/db.js";
 import { requireAuth } from "../middleware/auth.js";
 const router=Router();
-router.post("/:companyId",requireAuth,async(req,res)=>{try{const amount=Number(req.body?.amount);if(!Number.isFinite(amount)||amount<0)return res.status(400).json({error:"amount must be non-negative"});const c=await initDb().query("SELECT id FROM tax_companies WHERE id=$1 AND user_id=$2",[req.params.companyId,(req as any).userId]);if(!c.rowCount)return res.status(404).json({error:"company not found"});const id=randomUUID();await initDb().query("INSERT INTO tax_payments (id,company_id,reference_month,amount,tax_code,paid_at) VALUES ($1,$2,$3,$4,$5,$6)",[id,req.params.companyId,req.body?.referenceMonth,amount,req.body?.taxCode||null,req.body?.paidAt||null]);res.status(201).json({id,amount});}catch{res.status(400).json({error:"failed to save payment"});}});
+const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const MAX_AMOUNT=1_000_000_000;
+const MONTH=/^\d{4}-(0[1-9]|1[0-2])$/;
+router.post("/:companyId",requireAuth,async(req,res)=>{try{
+ if(!UUID.test(String(req.params.companyId)))return res.status(400).json({error:"invalid company id"});
+ const amount=Number(req.body?.amount);if(!Number.isFinite(amount)||amount<0||amount>MAX_AMOUNT)return res.status(400).json({error:"invalid amount"});
+ const referenceMonth=req.body?.referenceMonth;if(typeof referenceMonth!=="string"||!MONTH.test(referenceMonth))return res.status(400).json({error:"invalid reference month"});
+ const taxCode=req.body?.taxCode;if(taxCode!==undefined&&taxCode!==null&&(typeof taxCode!=="string"||taxCode.length>80))return res.status(400).json({error:"invalid tax code"});
+ const paidAt=req.body?.paidAt;if(paidAt!==undefined&&paidAt!==null&&(typeof paidAt!=="string"||Number.isNaN(Date.parse(paidAt))))return res.status(400).json({error:"invalid paid date"});
+ const rawKey=req.header("idempotency-key");const key=rawKey?.trim();if(!key||key.length>200)return res.status(400).json({error:"idempotency-key is required"});
+ const db=initDb();const userId=(req as any).userId;
+ const c=await db.query("SELECT id FROM tax_companies WHERE id=$1 AND user_id=$2",[req.params.companyId,userId]);if(!c.rowCount)return res.status(404).json({error:"company not found"});
+ const existing=await db.query("SELECT id,amount FROM tax_payments WHERE company_id=$1 AND idempotency_key=$2 LIMIT 1",[req.params.companyId,key]);if(existing.rowCount)return res.status(200).json({id:existing.rows[0].id,amount:Number(existing.rows[0].amount),duplicate:true});
+ const id=randomUUID();
+ try{await db.query("INSERT INTO tax_payments (id,company_id,reference_month,amount,tax_code,paid_at,idempotency_key) VALUES ($1,$2,$3,$4,$5,$6,$7)",[id,req.params.companyId,referenceMonth,amount,taxCode??null,paidAt??null,key]);}
+ catch(e){if((e as any)?.code==="23505"){const duplicate=await db.query("SELECT id,amount FROM tax_payments WHERE company_id=$1 AND idempotency_key=$2 LIMIT 1",[req.params.companyId,key]);if(duplicate.rowCount)return res.status(200).json({id:duplicate.rows[0].id,amount:Number(duplicate.rows[0].amount),duplicate:true});}throw e;}
+ res.status(201).json({id,amount,duplicate:false});
+}catch{res.status(400).json({error:"failed to save payment"});}});
 export default router;
