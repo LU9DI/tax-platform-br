@@ -1,3 +1,4 @@
+import acquisitionAutomationRoutes from "./src/routes/acquisitionAutomationRoutes.js";
 import authRoutes from "./src/routes/authRoutes.js";
 import taxRoutes from "./src/routes/taxRoutes.js";
 import companyRoutes from "./src/routes/companyRoutes.js";
@@ -85,6 +86,7 @@ for (const [path, title, description] of PUBLIC_PAGES) {
   });
 }
 
+app.use("/api/acquisition/automation", acquisitionAutomationRoutes);
 app.use("/api/acquisition", acquisitionRoutes);
 
 app.get("/api/health", async (_req, res) => {
