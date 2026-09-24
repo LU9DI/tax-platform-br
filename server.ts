@@ -10,7 +10,7 @@ import obligationRoutes from "./src/routes/obligationRoutes.js";
 import express from "express";
 import acquisitionRoutes from "./src/routes/acquisitionRoutes.js";
 import cors from "cors";
-import { initDb } from "./src/core/db.js";
+import { initDb, closeDb } from "./src/core/db.js";
 import { metricsMiddleware, metricsSnapshot } from "./src/core/metrics.js";
 import { requestId } from "./src/middleware/requestId.js";
 import { rateLimit } from "./src/middleware/rateLimit.js";
@@ -175,6 +175,7 @@ app.get("/api/metrics", (req, res) => {
 
 app.use(errorHandler);
 const server = app.listen(port, () => console.log("tax-platform-br API listening on " + port));
-const shutdown = () => server.close(() => process.exit(0));
+let shuttingDown = false;
+const shutdown = () => { if (shuttingDown) return; shuttingDown = true; server.close(async () => { try { await closeDb(); } finally { process.exit(0); } }); };
 process.on("SIGTERM", shutdown);
 process.on("SIGINT", shutdown);
