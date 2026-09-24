@@ -19,7 +19,7 @@ router.post("/",requireAuth,async(req,res)=>{
     const state=b.state==null?null:text(b.state,80),city=b.city==null?null:text(b.city,120),activity=b.activity==null?null:text(b.activity,200),openedAt=isoDate(b.openedAt);if(b.openedAt!=null&&!openedAt)return res.status(400).json({error:"invalid openedAt"});
     const reservation=await reserveIdempotency(userId,"company.create",idem);
     if(reservation?.replay)return res.status(reservation.statusCode).json(reservation.response);
-    if(reservation?.inProgress)return res.status(409).json({error:"request already in progress"});
+    if(reservation && "inProgress" in reservation && reservation.inProgress)return res.status(409).json({error:"request already in progress"});
     const result=await withEntitlementLock(userId,"companies",async(client)=>{
       const count=await client.query("SELECT COUNT(*)::int count FROM tax_companies WHERE user_id=$1",[userId]);
       const ent=await client.query("SELECT e.enabled,e.limit_value FROM app_users u LEFT JOIN plan_entitlements e ON e.plan=u.plan AND e.feature=$2 WHERE u.id=$1 FOR UPDATE OF u",[userId,"companies"]);
