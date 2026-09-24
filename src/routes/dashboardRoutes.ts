@@ -2,6 +2,7 @@ import { Router } from "express";
 import { initDb } from "../core/db.js";
 import { requireAuth } from "../middleware/auth.js";
 import { calculateMeiLoad } from "../services/taxService.js";
+import { audit, getEntitlement } from "../core/platformGovernance.js";
 const router=Router();
 const parseLimit=(v:unknown)=>{const n=Number(v??20);return Number.isInteger(n)&&n>=1&&n<=100?n:20;};
 const parseOffset=(v:unknown)=>{const n=Number(v??0);return Number.isInteger(n)&&n>=0&&n<=100000?n:0;};
