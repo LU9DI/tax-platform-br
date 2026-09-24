@@ -4,7 +4,7 @@ CREATE TABLE IF NOT EXISTS tax_rule_versions (
  created_at timestamptz NOT NULL DEFAULT now(), UNIQUE(rule_code,version)
 );
 CREATE TABLE IF NOT EXISTS tax_calculation_audits (
- id uuid PRIMARY KEY, company_id uuid NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+ id uuid PRIMARY KEY, company_id uuid NOT NULL REFERENCES tax_companies(id) ON DELETE CASCADE,
  calculation_type text NOT NULL, input jsonb NOT NULL, output jsonb NOT NULL,
  rule_version_id uuid REFERENCES tax_rule_versions(id) ON DELETE SET NULL,
  created_at timestamptz NOT NULL DEFAULT now()
