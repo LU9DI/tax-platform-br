@@ -1,0 +1,1 @@
+CREATE INDEX IF NOT EXISTS idx_tax_rules_effective ON tax_rule_versions(rule_code,effective_from,effective_to);
