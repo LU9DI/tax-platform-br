@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { prepareTaxProfile, simulateConsumptionTransition, calculateMeiLoad } from "../services/taxService.js";
 import { initDb } from "../core/db.js";
 import { requireAuth } from "../middleware/auth.js";
+import { recordTaxCalculation } from "../services/taxAuditService.js";
 const router=Router();
 const parseLimit=(v:unknown)=>{const n=Number(v??20);return Number.isInteger(n)&&n>=1&&n<=100?n:20;};
 const parseOffset=(v:unknown)=>{const n=Number(v??0);return Number.isInteger(n)&&n>=0&&n<=100000?n:0;};
@@ -13,9 +14,9 @@ router.get("/profiles",requireAuth,async(req,res)=>{try{const limit=parseLimit(r
 
 router.post("/profile/validate",requireAuth,(req,res)=>{try{res.json({valid:true,profile:prepareTaxProfile(req.body)});}catch(e){res.status(400).json({valid:false,error:e instanceof Error?e.message:"invalid tax profile"});}});
 
-router.post("/mei/load",requireAuth,(req,res)=>{try{res.json(calculateMeiLoad(req.body));}catch(e){res.status(400).json({error:e instanceof Error?e.message:"invalid MEI data"});}});
+router.post("/mei/load",requireAuth,async(req,res)=>{try{const output=calculateMeiLoad(req.body);const companyId=typeof req.body?.companyId==="string"?req.body.companyId:null;if(companyId){const audit=await recordTaxCalculation(companyId,(req as any).userId,"mei_load",req.body,output);if(!audit)return res.status(403).json({error:"company not found or not owned by user"});}res.json(output);}catch(e){res.status(400).json({error:e instanceof Error?e.message:"invalid MEI data"});}});
 
-router.post("/simulate/consumption-transition",requireAuth,(req,res)=>{try{res.json(simulateConsumptionTransition({base:Number(req.body?.base),year:Number(req.body?.year)}));}catch(e){res.status(400).json({error:e instanceof Error?e.message:"invalid simulation"});}});
+router.post("/simulate/consumption-transition",requireAuth,async(req,res)=>{try{const input={base:Number(req.body?.base),year:Number(req.body?.year)};const output=simulateConsumptionTransition(input);const companyId=typeof req.body?.companyId==="string"?req.body.companyId:null;if(companyId){const audit=await recordTaxCalculation(companyId,(req as any).userId,"consumption_transition",input,output);if(!audit)return res.status(403).json({error:"company not found or not owned by user"});}res.json(output);}catch(e){res.status(400).json({error:e instanceof Error?e.message:"invalid simulation"});}});
 
 router.get("/rules",async(req,res)=>{try{const year=Number(req.query.year||2026);const r=await initDb().query("SELECT id,tax_year,code,name,version,source_url,source_reference,parameters FROM tax_rules WHERE tax_year=$1 AND active=true ORDER BY code,version",[year]);res.json({rules:r.rows});}catch{res.status(500).json({error:"failed to load tax rules"});}});
 
