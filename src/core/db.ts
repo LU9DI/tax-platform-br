@@ -16,6 +16,7 @@ export function initDb() {
       connectionTimeoutMillis: Number(process.env.PG_CONNECT_TIMEOUT_MS || 10000),
       idleTimeoutMillis: Number(process.env.PG_IDLE_TIMEOUT_MS || 30000),
     });
+    pool.on("error", (error) => console.error(JSON.stringify({ event: "db.pool_error", error: error.message })));
   }
 
   return pool;
