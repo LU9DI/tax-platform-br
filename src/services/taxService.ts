@@ -86,8 +86,8 @@ export type SimplesNationalBracket = {
 };
 
 export type SimplesNationalRuleParameters = {
-  annex: "I";
-  activity: "commerce";
+  annex: "I" | "II";
+  activity: "commerce" | "industry";
   brackets: SimplesNationalBracket[];
 };
 
