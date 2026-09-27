@@ -26,7 +26,7 @@ router.post("/mei/load",requireAuth,async(req,res)=>{try{
  const enriched={...output,ruleVersion:{id:rule.id,code:rule.rule_code,version:rule.version,effectiveFrom:rule.effective_from,effectiveTo:rule.effective_to,sourceUrl:rule.source_url,sourceReference:rule.source_reference,parameters:rule.parameters}};
  if(companyId){const audit=await recordTaxCalculation(companyId,(req as any).userId,"mei_load",req.body,enriched,rule.id,parseIdempotencyKey(req));if(!audit)return res.status(403).json({error:"company not found or not owned by user"});}
  res.json(enriched);
-}catch(e){if(e instanceof Error && (e as Error & {code?:string}).code==="IDEMPOTENCY_CONFLICT")return res.status(409).json({error:e.message});res.status(400).json({error:e instanceof Error?e.message:"invalid MEI data"});}});
+}catch(e){if(e instanceof Error && (e as Error & {code?:string}).code==="IDEMPOTENCY_CONFLICT")return res.status(409).json({error:e.message});if(e instanceof Error && (e as Error & {code?:string}).code==="54000")return res.status(429).json({error:e.message});res.status(400).json({error:e instanceof Error?e.message:"invalid MEI data"});}});
 
 router.post("/simulate/consumption-transition",requireAuth,async(req,res)=>{try{
  const input={base:Number(req.body?.base),year:Number(req.body?.year)};
