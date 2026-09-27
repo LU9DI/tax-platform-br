@@ -14,13 +14,34 @@ router.get("/profiles",requireAuth,async(req,res)=>{try{const limit=parseLimit(r
 
 router.post("/profile/validate",requireAuth,(req,res)=>{try{res.json({valid:true,profile:prepareTaxProfile(req.body)});}catch(e){res.status(400).json({valid:false,error:e instanceof Error?e.message:"invalid tax profile"});}});
 
-router.post("/mei/load",requireAuth,async(req,res)=>{try{const output=calculateMeiLoad(req.body);const companyId=typeof req.body?.companyId==="string"?req.body.companyId:null;const ruleCode=typeof req.body?.ruleCode==="string"?req.body.ruleCode.trim():null;const rule=ruleCode?await getEffectiveTaxRule(ruleCode,new Date()):null;const enriched={...output,ruleVersion:rule?{id:rule.id,code:rule.rule_code,version:rule.version,effectiveFrom:rule.effective_from,effectiveTo:rule.effective_to}:null};if(companyId){const audit=await recordTaxCalculation(companyId,(req as any).userId,"mei_load",req.body,enriched,rule?.id);if(!audit)return res.status(403).json({error:"company not found or not owned by user"});}res.json(enriched);}catch(e){res.status(400).json({error:e instanceof Error?e.message:"invalid MEI data"});}});
+router.post("/mei/load",requireAuth,async(req,res)=>{try{
+ const year=Number(req.body?.year??new Date().getUTCFullYear());
+ const month=Number(req.body?.month??1);
+ const ruleCode=typeof req.body?.ruleCode==="string"&&req.body.ruleCode.trim()?req.body.ruleCode.trim():"MEI_2026";
+ const rule=await getEffectiveTaxRule(ruleCode,new Date(Date.UTC(year,month-1,1)));
+ if(!rule)return res.status(404).json({error:"tax rule not found for requested period"});
+ const output=calculateMeiLoad({...req.body,year},rule.parameters as any);
+ const companyId=typeof req.body?.companyId==="string"?req.body.companyId:null;
+ const enriched={...output,ruleVersion:{id:rule.id,code:rule.rule_code,version:rule.version,effectiveFrom:rule.effective_from,effectiveTo:rule.effective_to,sourceUrl:rule.source_url,sourceReference:rule.source_reference}};
+ if(companyId){const audit=await recordTaxCalculation(companyId,(req as any).userId,"mei_load",req.body,enriched,rule.id);if(!audit)return res.status(403).json({error:"company not found or not owned by user"});}
+ res.json(enriched);
+}catch(e){res.status(400).json({error:e instanceof Error?e.message:"invalid MEI data"});}});
 
-router.post("/simulate/consumption-transition",requireAuth,async(req,res)=>{try{const input={base:Number(req.body?.base),year:Number(req.body?.year)};const output=simulateConsumptionTransition(input);const companyId=typeof req.body?.companyId==="string"?req.body.companyId:null;const ruleCode=typeof req.body?.ruleCode==="string"?req.body.ruleCode.trim():null;const rule=ruleCode?await getEffectiveTaxRule(ruleCode,new Date()):null;const enriched={...output,ruleVersion:rule?{id:rule.id,code:rule.rule_code,version:rule.version,effectiveFrom:rule.effective_from,effectiveTo:rule.effective_to}:null};if(companyId){const audit=await recordTaxCalculation(companyId,(req as any).userId,"consumption_transition",input,enriched,rule?.id);if(!audit)return res.status(403).json({error:"company not found or not owned by user"});}res.json(enriched);}catch(e){res.status(400).json({error:e instanceof Error?e.message:"invalid simulation"});}});
+router.post("/simulate/consumption-transition",requireAuth,async(req,res)=>{try{
+ const input={base:Number(req.body?.base),year:Number(req.body?.year)};
+ const ruleCode=typeof req.body?.ruleCode==="string"&&req.body.ruleCode.trim()?req.body.ruleCode.trim():"RTC_CONSUMPTION_2026";
+ const rule=await getEffectiveTaxRule(ruleCode,new Date(Date.UTC(input.year,0,1)));
+ if(!rule)return res.status(404).json({error:"tax rule not found for requested year"});
+ const output=simulateConsumptionTransition(input,rule.parameters as any);
+ const companyId=typeof req.body?.companyId==="string"?req.body.companyId:null;
+ const enriched={...output,ruleVersion:{id:rule.id,code:rule.rule_code,version:rule.version,effectiveFrom:rule.effective_from,effectiveTo:rule.effective_to,sourceUrl:rule.source_url,sourceReference:rule.source_reference}};
+ if(companyId){const audit=await recordTaxCalculation(companyId,(req as any).userId,"consumption_transition",input,enriched,rule.id);if(!audit)return res.status(403).json({error:"company not found or not owned by user"});}
+ res.json(enriched);
+}catch(e){res.status(400).json({error:e instanceof Error?e.message:"invalid simulation"});}});
 
 router.get("/rules/effective",async(req,res)=>{try{const code=String(req.query.code||"").trim();if(!code)return res.status(400).json({error:"code is required"});const at=req.query.at?new Date(String(req.query.at)):new Date();if(Number.isNaN(at.getTime()))return res.status(400).json({error:"invalid date"});const rule=await getEffectiveTaxRule(code,at);if(!rule)return res.status(404).json({error:"effective rule not found"});res.json({rule});}catch{res.status(500).json({error:"failed to resolve effective tax rule"});}});
 router.get("/calculation-audits",requireAuth,async(req,res)=>{try{const companyId=String(req.query.companyId||"");if(!companyId)return res.status(400).json({error:"companyId is required"});const limit=parseLimit(req.query.limit),offset=parseOffset(req.query.offset),db=initDb();const own=await db.query("SELECT id,legal_name,cnpj FROM tax_companies WHERE id=$1 AND user_id=$2",[companyId,(req as any).userId]);if(!own.rowCount)return res.status(404).json({error:"company not found"});const r=await db.query("SELECT id,calculation_type,input,output,rule_version_id,created_at FROM tax_calculation_audits WHERE company_id=$1 ORDER BY created_at DESC LIMIT $2 OFFSET $3",[companyId,limit,offset]);const count=await db.query("SELECT COUNT(*)::int count FROM tax_calculation_audits WHERE company_id=$1",[companyId]);return res.json({company:own.rows[0],audits:r.rows,pagination:{limit,offset,total:Number(count.rows[0].count),hasMore:offset+r.rows.length<Number(count.rows[0].count)}});}catch{res.status(500).json({error:"failed to load calculation audits"});}});
 
-router.get("/rules",async(req,res)=>{try{const year=Number(req.query.year||2026);const r=await initDb().query("SELECT id,tax_year,code,name,version,source_url,source_reference,parameters FROM tax_rules WHERE tax_year=$1 AND active=true ORDER BY code,version",[year]);res.json({rules:r.rows});}catch{res.status(500).json({error:"failed to load tax rules"});}});
+router.get("/rules",async(req,res)=>{try{const year=Number(req.query.year||new Date().getUTCFullYear());if(!Number.isInteger(year)||year<2020||year>2100)return res.status(400).json({error:"invalid year"});const r=await initDb().query("SELECT id,tax_year,code,name,version,source_url,source_reference,parameters,effective_from,effective_to FROM tax_rules WHERE tax_year=$1 AND active=true ORDER BY code,version",[year]);res.json({rules:r.rows});}catch{res.status(500).json({error:"failed to load tax rules"});}});
 
 export default router;
