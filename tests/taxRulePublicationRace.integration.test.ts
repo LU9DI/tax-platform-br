@@ -17,7 +17,8 @@ test(
 
       const seed = await client.query(`
         SELECT c.id AS company_id, r.id AS rule_x_id, r.code, r.version,
-               r.parameters, r.effective_from, r.effective_to
+               r.parameters, r.effective_from::text AS effective_from,
+               r.effective_to::text AS effective_to
         FROM tax_companies c
         CROSS JOIN tax_rules r
         WHERE r.active=true
@@ -34,18 +35,14 @@ test(
       const nextEffectiveFrom = new Date("2099-01-01T00:00:00Z");
       const closedEffectiveTo = new Date("2098-12-31T00:00:00Z");
 
-      // X is the rule resolved by the calculation. Its evidence is captured
-      // before Y is published and keeps X's identity/parameters.
       const output = {
         total: 10,
         ruleVersion: {
           id: x.rule_x_id,
           code: x.code,
           version: x.version,
-          effectiveFrom: x.effective_from.toISOString().slice(0, 10),
-          effectiveTo: x.effective_to
-            ? x.effective_to.toISOString().slice(0, 10)
-            : null,
+          effectiveFrom: x.effective_from,
+          effectiveTo: x.effective_to,
           parameters: x.parameters,
         },
       };
@@ -65,12 +62,8 @@ test(
         ],
       );
 
-      // Publishing Y closes X's validity window, but must not alter X's
-      // identity or parameters because X is already referenced by evidence.
       await client.query(
-        `UPDATE tax_rules
-            SET effective_to=$1
-          WHERE id=$2`,
+        `UPDATE tax_rules SET effective_to=$1 WHERE id=$2`,
         [closedEffectiveTo, x.rule_x_id],
       );
 
@@ -80,31 +73,20 @@ test(
            tax_year, name, source_url, source_reference, parameters)
          VALUES ($1,$2,$3,true,$4,$5,$6,$7,$8,$9,$10,$11)`,
         [
-          yId,
-          x.code,
-          Number(x.version) + 1,
-          true,
-          nextEffectiveFrom,
-          null,
-          Number(x.version) + 1,
+          yId, x.code, Number(x.version) + 1, true,
+          nextEffectiveFrom, null, Number(x.version) + 1,
           "Rule race integration test",
           "https://example.invalid/rule-race-test",
-          "test-only",
-          JSON.stringify(x.parameters),
+          "test-only", JSON.stringify(x.parameters),
         ],
       );
 
       const audit = await client.query(
-        `SELECT rule_version_id, output
-           FROM tax_calculation_audits
-          WHERE id=$1`,
+        `SELECT rule_version_id, output FROM tax_calculation_audits WHERE id=$1`,
         [auditId],
       );
-
       const published = await client.query(
-        `SELECT id, version, effective_from
-           FROM tax_rules
-          WHERE id=$1`,
+        `SELECT id, version, effective_from FROM tax_rules WHERE id=$1`,
         [yId],
       );
 
@@ -115,8 +97,6 @@ test(
       assert.equal(published.rows[0].id, yId);
       assert.equal(Number(published.rows[0].version), Number(x.version) + 1);
 
-      // All writes are rolled back; this test never leaves synthetic data in
-      // the test database. Never point TAX_TEST_DATABASE_URL at production.
       await client.query("ROLLBACK");
     } finally {
       client.release();
