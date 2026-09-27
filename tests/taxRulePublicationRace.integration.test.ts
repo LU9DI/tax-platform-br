@@ -34,6 +34,10 @@ test(
       const idempotencyKey = `rule-race-test-${randomUUID()}`;
       const nextEffectiveFrom = new Date("2099-01-01T00:00:00Z");
       const closedEffectiveTo = new Date("2098-12-31T00:00:00Z");
+      const versionMatch = String(x.version).match(/^(.*?)(\\d+)$/);
+      const nextVersion = versionMatch
+        ? `${versionMatch[1]}${Number(versionMatch[2]) + 1}`
+        : `${x.version}.2`;
 
       const output = {
         total: 10,
@@ -73,8 +77,8 @@ test(
            tax_year, name, source_url, source_reference, parameters)
          VALUES ($1,$2,$3,true,$4,$5,$6,$7,$8,$9,$10,$11)`,
         [
-          yId, x.code, Number(x.version) + 1, true,
-          nextEffectiveFrom, null, Number(x.version) + 1,
+          yId, x.code, nextVersion, true,
+          nextEffectiveFrom, null, 2026,
           "Rule race integration test",
           "https://example.invalid/rule-race-test",
           "test-only", JSON.stringify(x.parameters),
@@ -92,10 +96,10 @@ test(
 
       assert.equal(audit.rows[0].rule_version_id, x.rule_x_id);
       assert.equal(audit.rows[0].output.ruleVersion.id, x.rule_x_id);
-      assert.equal(audit.rows[0].output.ruleVersion.version, Number(x.version));
+      assert.equal(audit.rows[0].output.ruleVersion.version, x.version);
       assert.deepEqual(audit.rows[0].output.ruleVersion.parameters, x.parameters);
       assert.equal(published.rows[0].id, yId);
-      assert.equal(Number(published.rows[0].version), Number(x.version) + 1);
+      assert.equal(published.rows[0].version, nextVersion);
 
       await client.query("ROLLBACK");
     } finally {
