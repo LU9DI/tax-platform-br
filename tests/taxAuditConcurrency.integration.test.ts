@@ -36,26 +36,36 @@ test("tax calculation idempotency is race-safe at the database constraint", { sk
     RETURNING id
   `;
 
-  const results = await Promise.all([
-    pool.query(sql, [id1, companyId, ruleVersionId, key]),
-    pool.query(sql, [id2, companyId, ruleVersionId, key]),
-  ]);
+  const client1 = await pool.connect();
+  const client2 = await pool.connect();
 
-  const inserted = results.filter((r) => r.rowCount === 1);
-  assert.equal(inserted.length, 1);
+  try {
+    await client1.query("BEGIN");
+    await client2.query("BEGIN");
 
-  const persisted = await pool.query(
-    `SELECT count(*)::int AS count
-     FROM tax_calculation_audits
-     WHERE company_id=$1 AND calculation_type='concurrency_test' AND idempotency_key=$2`,
-    [companyId, key],
-  );
-  assert.equal(Number(persisted.rows[0].count), 1);
+    const first = await client1.query(sql, [id1, companyId, ruleVersionId, key]);
+    const secondPromise = client2.query(sql, [id2, companyId, ruleVersionId, key]);
 
-  await pool.query(
-    `DELETE FROM tax_calculation_audits
-     WHERE company_id=$1 AND calculation_type='concurrency_test' AND idempotency_key=$2`,
-    [companyId, key],
-  );
+    // The second transaction must wait on the unique constraint until the first resolves.
+    await client1.query("COMMIT");
+    const second = await secondPromise;
+
+    assert.equal(first.rowCount, 1);
+    assert.equal(second.rowCount, 0);
+
+    const persisted = await client1.query(
+      `SELECT count(*)::int AS count
+       FROM tax_calculation_audits
+       WHERE company_id=$1 AND calculation_type='concurrency_test' AND idempotency_key=$2`,
+      [companyId, key],
+    );
+    assert.equal(Number(persisted.rows[0].count), 1);
+
+    await client2.query("ROLLBACK");
+  } finally {
+    client1.release();
+    client2.release();
+  }
+
   await pool.end();
 });
