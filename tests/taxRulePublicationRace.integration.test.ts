@@ -16,9 +16,10 @@ test(
       await client.query("BEGIN");
 
       const seed = await client.query(`
-        SELECT c.id AS company_id, r.id AS rule_x_id, r.code, r.version,
+        SELECT c.id AS company_id, r.id AS rule_x_id, r.code, r.version, r.tax_year,
                r.parameters, r.effective_from::text AS effective_from,
-               r.effective_to::text AS effective_to
+               r.effective_to::text AS effective_to,
+               (SELECT MAX(effective_to) FROM tax_rules r2 WHERE r2.code = r.code) AS max_effective_to
         FROM tax_companies c
         CROSS JOIN tax_rules r
         WHERE r.active=true
@@ -32,8 +33,9 @@ test(
       const yId = randomUUID();
       const auditId = randomUUID();
       const idempotencyKey = `rule-race-test-${randomUUID()}`;
-      const nextEffectiveFrom = new Date("2099-01-01T00:00:00Z");
-      const closedEffectiveTo = new Date("2098-12-31T00:00:00Z");
+      const maxEffectiveTo = new Date(`${x.max_effective_to}T00:00:00Z`);
+      const nextEffectiveFrom = new Date(maxEffectiveTo.getTime() + 24 * 60 * 60 * 1000);
+      const closedEffectiveTo = new Date(nextEffectiveFrom.getTime() - 24 * 60 * 60 * 1000);
       const versionMatch = String(x.version).match(/^(.*?)(\\d+)$/);
       const nextVersion = versionMatch
         ? `${versionMatch[1]}${Number(versionMatch[2]) + 1}`
@@ -78,7 +80,7 @@ test(
          VALUES ($1,$2,$3,true,$4,$5,$6,$7,$8,$9,$10,$11)`,
         [
           yId, x.code, nextVersion, true,
-          nextEffectiveFrom, null, 2026,
+          nextEffectiveFrom, null, x.tax_year,
           "Rule race integration test",
           "https://example.invalid/rule-race-test",
           "test-only", JSON.stringify(x.parameters),
