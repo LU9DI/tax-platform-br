@@ -49,6 +49,26 @@ async function verifyTaxRuleIntegrity(client: any) {
         AND effective_to < effective_from
       LIMIT 10`,
   );
+
+  const overlaps = await client.query(
+    `SELECT a.code, a.version AS version_a, b.version AS version_b
+       FROM tax_rules a
+       JOIN tax_rules b
+         ON b.code = a.code
+        AND b.id <> a.id
+        AND b.active = true
+        AND a.active = true
+        AND a.effective_from <= COALESCE(b.effective_to, '9999-12-31'::date)
+        AND COALESCE(a.effective_to, '9999-12-31'::date) >= b.effective_from
+      WHERE a.id < b.id
+      LIMIT 10`,
+  );
+  if (overlaps.rowCount) {
+    throw new Error(
+      `tax rule integrity check failed: overlapping active validity periods: ${JSON.stringify(overlaps.rows)}`,
+    );
+  }
+
   if (invalid.rowCount) {
     throw new Error(
       `tax rule integrity check failed: invalid effective periods: ${JSON.stringify(invalid.rows)}`,
