@@ -77,3 +77,60 @@ export function simulateConsumptionTransition(input: TaxSimulationInput, rule: C
     note: "Simulation only; actual treatment depends on the applicable regime, operation, base and accessory obligations."
   };
 }
+
+
+export type SimplesNationalBracket = {
+  max_revenue_12m: number;
+  nominal_rate: number;
+  deduction: number;
+};
+
+export type SimplesNationalRuleParameters = {
+  annex: "I";
+  activity: "commerce";
+  brackets: SimplesNationalBracket[];
+};
+
+export function calculateSimplesNationalAnexoI(input: {
+  revenue12m: number;
+  monthlyRevenue: number;
+}, rule: SimplesNationalRuleParameters) {
+  const revenue12m = finiteNonNegative(input.revenue12m, "revenue12m");
+  const monthlyRevenue = finiteNonNegative(input.monthlyRevenue, "monthlyRevenue");
+  if (!Array.isArray(rule?.brackets) || rule.brackets.length !== 6) {
+    throw new Error("invalid Simples Nacional Anexo I rule parameters");
+  }
+  const bracket = rule.brackets.find((item) =>
+    Number.isFinite(item.max_revenue_12m) &&
+    revenue12m <= item.max_revenue_12m
+  );
+  if (!bracket) throw new Error("revenue12m exceeds Simples Nacional Anexo I limit");
+
+  const nominalRate = Number(bracket.nominal_rate);
+  const deduction = Number(bracket.deduction);
+  if (!Number.isFinite(nominalRate) || nominalRate < 0 ||
+      !Number.isFinite(deduction) || deduction < 0) {
+    throw new Error("invalid Simples Nacional Anexo I bracket parameters");
+  }
+
+  const effectiveRate = revenue12m === 0
+    ? nominalRate
+    : ((revenue12m * nominalRate) - deduction) / revenue12m;
+  if (!Number.isFinite(effectiveRate) || effectiveRate < 0 || effectiveRate > nominalRate) {
+    throw new Error("invalid effective Simples Nacional rate");
+  }
+
+  return {
+    regime: "simples_nacional",
+    annex: rule.annex,
+    activity: rule.activity,
+    revenue12m,
+    monthlyRevenue,
+    bracketMaxRevenue12m: bracket.max_revenue_12m,
+    nominalRate: Math.round(nominalRate * 1000000) / 1000000,
+    deduction: Math.round(deduction * 100) / 100,
+    effectiveRate: Math.round(effectiveRate * 1000000) / 1000000,
+    estimatedMonthlyTax: Math.round(monthlyRevenue * effectiveRate * 100) / 100,
+    note: "Estimativa pelo Anexo I; o enquadramento e a segregação das receitas devem ser confirmados conforme a legislação e a situação do contribuinte."
+  };
+}
