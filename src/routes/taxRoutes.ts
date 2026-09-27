@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { randomUUID } from "node:crypto";
-import { prepareTaxProfile, simulateConsumptionTransition, calculateMeiLoad, calculateSimplesNationalAnexoI } from "../services/taxService.js";
+import { prepareTaxProfile, simulateConsumptionTransition, calculateMeiLoad, calculateSimplesNationalAnexoI, calculateSimplesNationalAnexoII } from "../services/taxService.js";
 import { initDb } from "../core/db.js";
 import { requireAuth } from "../middleware/auth.js";
 import { calculationRateLimit } from "../middleware/calculationRateLimit.js";
@@ -43,6 +43,21 @@ router.post("/simulate/consumption-transition",requireAuth,calculationRateLimit,
  res.json(enriched);
 }catch(e){if(e instanceof Error && (e as Error & {code?:string}).code==="IDEMPOTENCY_CONFLICT")return res.status(409).json({error:e.message});if(e instanceof Error && (e as Error & {code?:string}).code==="54000")return res.status(429).json({error:e.message});res.status(400).json({error:e instanceof Error?e.message:"invalid simulation"});}});
 
+router.post("/simples-nacional/anexo-ii",requireAuth,calculationRateLimit,async(req,res)=>{try{
+ const revenue12m=Number(req.body?.revenue12m),monthlyRevenue=Number(req.body?.monthlyRevenue),year=Number(req.body?.year??new Date().getUTCFullYear());
+ if(!Number.isInteger(year))return res.status(400).json({error:"year must be an integer"});
+ const ruleCode=typeof req.body?.ruleCode==="string"&&req.body.ruleCode.trim()?req.body.ruleCode.trim():"SIMPLES_NACIONAL_ANEXO_II_2026";
+ const rule=await getEffectiveTaxRule(ruleCode,new Date(Date.UTC(year,0,1)));
+ if(!rule)return res.status(404).json({error:"tax rule not found for requested year"});
+ const companyId=typeof req.body?.companyId==="string"&&req.body.companyId.trim()?req.body.companyId.trim():null;
+ if(!companyId)return res.status(400).json({error:"companyId is required for audited calculations"});
+ const input={revenue12m,monthlyRevenue,year};
+ const output=calculateSimplesNationalAnexoII(input,rule.parameters as any);
+ const enriched={...output,ruleVersion:{id:rule.id,code:rule.rule_code,version:rule.version,effectiveFrom:rule.effective_from,effectiveTo:rule.effective_to,sourceUrl:rule.source_url,sourceReference:rule.source_reference,parameters:rule.parameters}};
+ const audit=await recordTaxCalculation(companyId,(req as any).userId,"simples_nacional_anexo_ii",input,enriched,rule.id,parseIdempotencyKey(req));
+ if(!audit)return res.status(403).json({error:"company not found or not owned by user"});
+ res.json(enriched);
+}catch(e){if(e instanceof Error && (e as Error & {code?:string}).code==="IDEMPOTENCY_CONFLICT")return res.status(409).json({error:e.message});if(e instanceof Error && (e as Error & {code?:string}).code==="54000")return res.status(429).json({error:e.message});res.status(400).json({error:e instanceof Error?e.message:"invalid Simples Nacional data"});}});
 router.post("/simples-nacional/anexo-i",requireAuth,calculationRateLimit,async(req,res)=>{try{
  const revenue12m=Number(req.body?.revenue12m),monthlyRevenue=Number(req.body?.monthlyRevenue),year=Number(req.body?.year??new Date().getUTCFullYear());
  if(!Number.isInteger(year))return res.status(400).json({error:"year must be an integer"});
