@@ -10,19 +10,23 @@ test(
   { skip: !databaseUrl },
   async () => {
     const pool = new pg.Pool({ connectionString: databaseUrl });
-    const client = await pool.connect();
+    const resolver = await pool.connect();
+    const publisher = await pool.connect();
 
     try {
-      await client.query("BEGIN");
-
-      const seed = await client.query(`
-        SELECT c.id AS company_id, r.id AS rule_x_id, r.code, r.version, r.tax_year,
-               r.parameters, r.effective_from::text AS effective_from,
-               r.effective_to::text AS effective_to,
-               (SELECT MAX(effective_to) FROM tax_rules r2 WHERE r2.code = r.code) AS max_effective_to
+      const seed = await resolver.query(`
+        SELECT c.id AS company_id,
+               r.id AS rule_x_id,
+               r.code,
+               r.version,
+               r.tax_year,
+               r.parameters,
+               r.effective_from::text AS effective_from,
+               r.effective_to::text AS effective_to
         FROM tax_companies c
         CROSS JOIN tax_rules r
         WHERE r.active=true
+          AND r.effective_to IS NOT NULL
         ORDER BY r.effective_from DESC, r.version DESC
         LIMIT 1
       `);
@@ -33,14 +37,14 @@ test(
       const yId = randomUUID();
       const auditId = randomUUID();
       const idempotencyKey = `rule-race-test-${randomUUID()}`;
-      const maxEffectiveTo = new Date(`${x.max_effective_to}T00:00:00Z`);
-      const nextEffectiveFrom = new Date(maxEffectiveTo.getTime() + 24 * 60 * 60 * 1000);
-      const closedEffectiveTo = new Date(nextEffectiveFrom.getTime() - 24 * 60 * 60 * 1000);
+      const xEffectiveTo = new Date(`${x.effective_to}T00:00:00Z`);
+      const yEffectiveFrom = new Date(xEffectiveTo.getTime() + 24 * 60 * 60 * 1000);
       const versionMatch = String(x.version).match(/^(.*?)(\\d+)$/);
       const nextVersion = versionMatch
         ? `${versionMatch[1]}${Number(versionMatch[2]) + 1}`
         : `${x.version}.2`;
 
+      // Calculation phase: resolve X first and retain its exact identity/evidence.
       const output = {
         total: 10,
         ruleVersion: {
@@ -53,7 +57,30 @@ test(
         },
       };
 
-      await client.query(
+      // Publication phase runs after resolution, before the historical audit is persisted.
+      await publisher.query("BEGIN");
+      await publisher.query(
+        `UPDATE tax_rules SET effective_to=$1 WHERE id=$2`,
+        [new Date(yEffectiveFrom.getTime() - 24 * 60 * 60 * 1000), x.rule_x_id],
+      );
+      await publisher.query(
+        `INSERT INTO tax_rules
+          (id, code, version, active, effective_from, effective_to,
+           tax_year, name, source_url, source_reference, parameters)
+         VALUES ($1,$2,$3,true,$4,$5,$6,$7,$8,$9,$10,$11)`,
+        [
+          yId, x.code, nextVersion, true,
+          yEffectiveFrom, null, x.tax_year,
+          "Rule race integration test",
+          "https://example.invalid/rule-race-test",
+          "test-only", JSON.stringify(x.parameters),
+        ],
+      );
+      await publisher.query("COMMIT");
+
+      // Persistence phase must use X, not re-resolve the now-current Y rule.
+      await resolver.query("BEGIN");
+      await resolver.query(
         `INSERT INTO tax_calculation_audits
           (id, company_id, calculation_type, input, output, rule_version_id,
            idempotency_key, request_fingerprint)
@@ -68,31 +95,16 @@ test(
         ],
       );
 
-      await client.query(
-        `UPDATE tax_rules SET effective_to=$1 WHERE id=$2`,
-        [closedEffectiveTo, x.rule_x_id],
-      );
-
-      await client.query(
-        `INSERT INTO tax_rules
-          (id, code, version, active, effective_from, effective_to,
-           tax_year, name, source_url, source_reference, parameters)
-         VALUES ($1,$2,$3,true,$4,$5,$6,$7,$8,$9,$10,$11)`,
-        [
-          yId, x.code, nextVersion, true,
-          nextEffectiveFrom, null, x.tax_year,
-          "Rule race integration test",
-          "https://example.invalid/rule-race-test",
-          "test-only", JSON.stringify(x.parameters),
-        ],
-      );
-
-      const audit = await client.query(
-        `SELECT rule_version_id, output FROM tax_calculation_audits WHERE id=$1`,
+      const audit = await resolver.query(
+        `SELECT rule_version_id, output
+         FROM tax_calculation_audits
+         WHERE id=$1`,
         [auditId],
       );
-      const published = await client.query(
-        `SELECT id, version, effective_from FROM tax_rules WHERE id=$1`,
+      const published = await resolver.query(
+        `SELECT id, version, effective_from
+         FROM tax_rules
+         WHERE id=$1`,
         [yId],
       );
 
@@ -103,9 +115,12 @@ test(
       assert.equal(published.rows[0].id, yId);
       assert.equal(published.rows[0].version, nextVersion);
 
-      await client.query("ROLLBACK");
+      await resolver.query("ROLLBACK");
     } finally {
-      client.release();
+      await publisher.query("ROLLBACK").catch(() => undefined);
+      await resolver.query("ROLLBACK").catch(() => undefined);
+      publisher.release();
+      resolver.release();
       await pool.end();
     }
   },
