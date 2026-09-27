@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { initDb } from "../core/db.js";
 
 export async function getEffectiveTaxRule(ruleCode: string, at = new Date()) {
@@ -16,6 +16,13 @@ export async function getEffectiveTaxRule(ruleCode: string, at = new Date()) {
   return r.rows[0] ?? null;
 }
 
+function stableJson(value: unknown): string {
+  if (value === null || typeof value !== "object") return JSON.stringify(value);
+  if (Array.isArray(value)) return `[${value.map(stableJson).join(",")}]`;
+  const record = value as Record<string, unknown>;
+  return `{${Object.keys(record).sort().map((key) => `${JSON.stringify(key)}:${stableJson(record[key])}`).join(",")}}`;
+}
+
 export async function recordTaxCalculation(
   companyId: string,
   userId: string,
@@ -23,6 +30,7 @@ export async function recordTaxCalculation(
   input: unknown,
   output: unknown,
   ruleVersionId: string,
+  idempotencyKey?: string,
 ) {
   const own = await initDb().query(
     "SELECT id FROM tax_companies WHERE id=$1 AND user_id=$2",
@@ -30,9 +38,38 @@ export async function recordTaxCalculation(
   );
   if (!own.rowCount) return null;
 
-  const r = await initDb().query(
-    "INSERT INTO tax_calculation_audits(id,company_id,calculation_type,input,output,rule_version_id) VALUES($1,$2,$3,$4,$5,$6) RETURNING *",
-    [randomUUID(), companyId, type, JSON.stringify(input), JSON.stringify(output), ruleVersionId],
+  const fingerprint = createHash("sha256")
+    .update(stableJson({ type, input, ruleVersionId }))
+    .digest("hex");
+
+  const db = initDb();
+  const r = await db.query(
+    `INSERT INTO tax_calculation_audits
+       (id,company_id,calculation_type,input,output,rule_version_id,idempotency_key,request_fingerprint)
+     VALUES($1,$2,$3,$4,$5,$6,$7,$8)
+     ON CONFLICT (company_id, calculation_type, idempotency_key)
+     WHERE idempotency_key IS NOT NULL
+     DO NOTHING
+     RETURNING *`,
+    [randomUUID(), companyId, type, JSON.stringify(input), JSON.stringify(output), ruleVersionId, idempotencyKey ?? null, fingerprint],
   );
-  return r.rows[0];
+
+  if (r.rowCount) return r.rows[0];
+
+  if (idempotencyKey) {
+    const existing = await db.query(
+      "SELECT * FROM tax_calculation_audits WHERE company_id=$1 AND calculation_type=$2 AND idempotency_key=$3 LIMIT 1",
+      [companyId, type, idempotencyKey],
+    );
+    if (existing.rowCount) {
+      if (existing.rows[0].request_fingerprint !== fingerprint) {
+        const error = new Error("idempotency-key was already used with a different calculation payload");
+        (error as Error & { code?: string }).code = "IDEMPOTENCY_CONFLICT";
+        throw error;
+      }
+      return existing.rows[0];
+    }
+  }
+
+  throw new Error("failed to persist tax calculation audit");
 }
