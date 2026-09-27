@@ -12,8 +12,8 @@ test("tax calculation idempotency is race-safe at the database constraint", { sk
            r.id AS rule_version_id,
            r.code,
            r.version,
-           r.effective_from,
-           r.effective_to,
+           r.effective_from::text AS effective_from,
+           r.effective_to::text AS effective_to,
            r.parameters
     FROM tax_companies c
     CROSS JOIN tax_rules r
@@ -33,16 +33,14 @@ test("tax calculation idempotency is race-safe at the database constraint", { sk
   const id1 = randomUUID();
   const id2 = randomUUID();
 
-  // The DB evidence trigger requires the persisted output to prove which exact
-  // rule version and parameters produced the calculation.
   const output = JSON.stringify({
     total: 10,
     ruleVersion: {
       id: x.rule_version_id,
       code: x.code,
       version: x.version,
-      effectiveFrom: x.effective_from.toISOString().slice(0, 10),
-      effectiveTo: x.effective_to ? x.effective_to.toISOString().slice(0, 10) : null,
+      effectiveFrom: x.effective_from,
+      effectiveTo: x.effective_to,
       parameters: x.parameters,
     },
   });
@@ -67,7 +65,6 @@ test("tax calculation idempotency is race-safe at the database constraint", { sk
     const first = await client1.query(sql, [id1, companyId, output, ruleVersionId, key]);
     const secondPromise = client2.query(sql, [id2, companyId, output, ruleVersionId, key]);
 
-    // The second transaction must wait on the unique constraint until the first resolves.
     await client1.query("COMMIT");
     const second = await secondPromise;
 
