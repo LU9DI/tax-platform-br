@@ -9,11 +9,11 @@ CREATE TABLE IF NOT EXISTS tax_companies (id UUID PRIMARY KEY,user_id UUID NOT N
 CREATE INDEX IF NOT EXISTS idx_tax_companies_user ON tax_companies(user_id,updated_at DESC);
 CREATE TABLE IF NOT EXISTS tax_revenues (id UUID PRIMARY KEY,company_id UUID NOT NULL REFERENCES tax_companies(id) ON DELETE CASCADE,reference_month DATE NOT NULL,amount NUMERIC(14,2) NOT NULL CHECK(amount>=0),source TEXT NOT NULL DEFAULT 'manual',notes TEXT,created_at TIMESTAMPTZ NOT NULL DEFAULT now(),UNIQUE(company_id,reference_month));
 CREATE INDEX IF NOT EXISTS idx_tax_revenues_company_month ON tax_revenues(company_id,reference_month DESC);
-CREATE TABLE IF NOT EXISTS tax_payments (id UUID PRIMARY KEY,company_id UUID NOT NULL REFERENCES tax_companies(id) ON DELETE CASCADE,reference_month DATE NOT NULL,amount NUMERIC(14,2) NOT NULL CHECK(amount>=0),tax_code TEXT,paid_at DATE,created_at TIMESTAMPTZ NOT NULL DEFAULT now());
+CREATE TABLE IF NOT EXISTS tax_payments (id UUID PRIMARY KEY,company_id UUID NOT NULL REFERENCES tax_companies(id) ON DELETE CASCADE,reference_month DATE NOT NULL,amount NUMERIC(14,2) NOT NULL CHECK(amount>=0),tax_code TEXT,paid_at DATE,created_at TIMESTAMPTZ NOT NULL DEFAULT now(),idempotency_key TEXT,request_fingerprint TEXT);
 CREATE INDEX IF NOT EXISTS idx_tax_payments_company_month ON tax_payments(company_id,reference_month DESC);
 CREATE TABLE IF NOT EXISTS tax_obligations (id UUID PRIMARY KEY,company_id UUID NOT NULL REFERENCES tax_companies(id) ON DELETE CASCADE,code TEXT NOT NULL,name TEXT NOT NULL,due_date DATE NOT NULL,status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','done','overdue')),notes TEXT);
 CREATE UNIQUE INDEX IF NOT EXISTS uq_tax_obligations_company_code_due ON tax_obligations(company_id,code,due_date);
 CREATE INDEX IF NOT EXISTS idx_tax_obligations_company_due ON tax_obligations(company_id,due_date);
-CREATE TABLE IF NOT EXISTS tax_calculation_audits (id UUID PRIMARY KEY,company_id UUID NOT NULL REFERENCES tax_companies(id) ON DELETE CASCADE,calculation_type TEXT NOT NULL,input JSONB NOT NULL,output JSONB NOT NULL,rule_version_id UUID REFERENCES tax_rules(id) ON DELETE SET NULL,created_at TIMESTAMPTZ NOT NULL DEFAULT now());
+CREATE TABLE IF NOT EXISTS tax_calculation_audits (id UUID PRIMARY KEY,company_id UUID NOT NULL REFERENCES tax_companies(id) ON DELETE CASCADE,calculation_type TEXT NOT NULL,input JSONB NOT NULL,output JSONB NOT NULL,rule_version_id UUID REFERENCES tax_rules(id) ON DELETE RESTRICT,created_at TIMESTAMPTZ NOT NULL DEFAULT now());
 CREATE INDEX IF NOT EXISTS idx_tax_calculation_audits_company_created ON tax_calculation_audits(company_id,created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_tax_calculation_audits_rule_version ON tax_calculation_audits(rule_version_id);
