@@ -23,6 +23,12 @@ function stableJson(value: unknown): string {
   return `{${Object.keys(record).sort().map((key) => `${JSON.stringify(key)}:${stableJson(record[key])}`).join(",")}}`;
 }
 
+function ruleSnapshotFromOutput(output: unknown) {
+  if (!output || typeof output !== "object") return null;
+  const snapshot = (output as Record<string, unknown>).ruleVersion;
+  return snapshot && typeof snapshot === "object" ? snapshot as Record<string, unknown> : null;
+}
+
 export async function recordTaxCalculation(
   companyId: string,
   userId: string,
@@ -32,17 +38,48 @@ export async function recordTaxCalculation(
   ruleVersionId: string,
   idempotencyKey?: string,
 ) {
-  const own = await initDb().query(
+  const db = initDb();
+  const own = await db.query(
     "SELECT id FROM tax_companies WHERE id=$1 AND user_id=$2",
     [companyId, userId],
   );
   if (!own.rowCount) return null;
 
+  // Re-read only the referenced rule row. We never resolve "the current rule"
+  // here: the caller's exact ruleVersionId is the identity of the calculation.
+  // This check prevents a calculation produced with rule A from being persisted
+  // under rule B or with parameters that differ from the referenced version.
+  const rule = await db.query(
+    `SELECT id, code AS rule_code, version, effective_from, effective_to,
+            source_url, source_reference, parameters
+     FROM tax_rules
+     WHERE id=$1`,
+    [ruleVersionId],
+  );
+  if (!rule.rowCount) throw new Error("tax rule version no longer exists");
+
+  const snapshot = ruleSnapshotFromOutput(output);
+  const persistedSnapshot = {
+    id: rule.rows[0].id,
+    code: rule.rows[0].rule_code,
+    version: rule.rows[0].version,
+    effectiveFrom: rule.rows[0].effective_from,
+    effectiveTo: rule.rows[0].effective_to,
+    sourceUrl: rule.rows[0].source_url,
+    sourceReference: rule.rows[0].source_reference,
+    parameters: rule.rows[0].parameters,
+  };
+
+  if (!snapshot || stableJson(snapshot) !== stableJson(persistedSnapshot)) {
+    const error = new Error("calculation evidence does not match the referenced tax rule version");
+    (error as Error & { code?: string }).code = "RULE_EVIDENCE_MISMATCH";
+    throw error;
+  }
+
   const fingerprint = createHash("sha256")
     .update(stableJson({ type, input, ruleVersionId }))
     .digest("hex");
 
-  const db = initDb();
   const r = await db.query(
     `INSERT INTO tax_calculation_audits
        (id,company_id,calculation_type,input,output,rule_version_id,idempotency_key,request_fingerprint)
