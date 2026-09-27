@@ -22,7 +22,7 @@ router.post("/mei/load",requireAuth,async(req,res)=>{try{
  if(!rule)return res.status(404).json({error:"tax rule not found for requested period"});
  const output=calculateMeiLoad({...req.body,year},rule.parameters as any);
  const companyId=typeof req.body?.companyId==="string"?req.body.companyId:null;
- const enriched={...output,ruleVersion:{id:rule.id,code:rule.rule_code,version:rule.version,effectiveFrom:rule.effective_from,effectiveTo:rule.effective_to,sourceUrl:rule.source_url,sourceReference:rule.source_reference}};
+ const enriched={...output,ruleVersion:{id:rule.id,code:rule.rule_code,version:rule.version,effectiveFrom:rule.effective_from,effectiveTo:rule.effective_to,sourceUrl:rule.source_url,sourceReference:rule.source_reference,parameters:rule.parameters}};
  if(companyId){const audit=await recordTaxCalculation(companyId,(req as any).userId,"mei_load",req.body,enriched,rule.id);if(!audit)return res.status(403).json({error:"company not found or not owned by user"});}
  res.json(enriched);
 }catch(e){res.status(400).json({error:e instanceof Error?e.message:"invalid MEI data"});}});
