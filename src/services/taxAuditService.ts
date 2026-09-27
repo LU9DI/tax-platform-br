@@ -59,18 +59,24 @@ export async function recordTaxCalculation(
   if (!rule.rowCount) throw new Error("tax rule version no longer exists");
 
   const snapshot = ruleSnapshotFromOutput(output);
-  const persistedSnapshot = {
+  const expectedSnapshot = {
     id: rule.rows[0].id,
     code: rule.rows[0].rule_code,
     version: rule.rows[0].version,
-    effectiveFrom: rule.rows[0].effective_from,
-    effectiveTo: rule.rows[0].effective_to,
-    sourceUrl: rule.rows[0].source_url,
-    sourceReference: rule.rows[0].source_reference,
     parameters: rule.rows[0].parameters,
   };
+  const actualSnapshot = snapshot && {
+    id: snapshot.id,
+    code: snapshot.code,
+    version: snapshot.version,
+    parameters: snapshot.parameters,
+  };
 
-  if (!snapshot || stableJson(snapshot) !== stableJson(persistedSnapshot)) {
+  // effectiveFrom/effectiveTo are intentionally not compared here: publishing
+  // a new version may close the old validity window after the calculation has
+  // already resolved it. The historical output must retain the original dates,
+  // while identity and parameters must remain immutable.
+  if (!actualSnapshot || stableJson(actualSnapshot) !== stableJson(expectedSnapshot)) {
     const error = new Error("calculation evidence does not match the referenced tax rule version");
     (error as Error & { code?: string }).code = "RULE_EVIDENCE_MISMATCH";
     throw error;
