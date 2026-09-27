@@ -38,7 +38,7 @@ test("rule evidence stays bound to the resolved version when validity dates chan
     ruleVersion: {
       ...evidenceFromX.ruleVersion,
       id: "rule-y",
-      version: 2,
+      version: "2",
       parameters: { annual_limit: 90000, das: { commerce: 80 } },
     },
   };
