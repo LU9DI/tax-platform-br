@@ -2,17 +2,81 @@ name: CI
 
 on:
   push:
+    branches: [main]
   pull_request:
 
+permissions:
+  contents: read
+
 jobs:
-  check:
+  verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: tax
+          POSTGRES_PASSWORD: tax
+          POSTGRES_DB: tax_platform_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U tax -d tax_platform_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      DATABASE_URL: postgresql://tax:tax@localhost:5432/tax_platform_test
+      TAX_TEST_DATABASE_URL: postgresql://tax:tax@localhost:5432/tax_platform_test
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
-      - run: npm install --no-audit --no-fund
-      - run: npm run check
-      - run: npm test
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Bootstrap base schema required by the migration chain
+        run: |
+          psql "$DATABASE_URL" <<'SQL'
+          CREATE TABLE app_users (
+            id uuid PRIMARY KEY,
+            email text NOT NULL UNIQUE,
+            password_hash text NOT NULL
+          );
+          CREATE TABLE tax_companies (
+            id uuid PRIMARY KEY,
+            user_id uuid NOT NULL REFERENCES app_users(id) ON DELETE CASCADE,
+            legal_name text NOT NULL,
+            cnpj text NOT NULL UNIQUE
+          );
+          CREATE TABLE tax_rules (
+            id uuid PRIMARY KEY,
+            tax_year integer NOT NULL,
+            code text NOT NULL,
+            name text NOT NULL,
+            version text NOT NULL,
+            source_url text NOT NULL,
+            source_reference text NOT NULL,
+            parameters jsonb NOT NULL,
+            effective_from date NOT NULL,
+            effective_to date,
+            active boolean NOT NULL DEFAULT true,
+            UNIQUE (tax_year, code, version)
+          );
+          INSERT INTO app_users (id,email,password_hash)
+          VALUES ('00000000-0000-4000-8000-000000000001','ci@example.test','not-used');
+          INSERT INTO tax_companies (id,user_id,legal_name,cnpj)
+          VALUES (
+            '00000000-0000-4000-8000-000000000002',
+            '00000000-0000-4000-8000-000000000001',
+            'CI Test Company',
+            '00000000000191'
+          );
+          SQL
+      - name: Apply migrations and verify integrity
+        run: npx tsx scripts/migrate.ts
+      - name: Typecheck
+        run: npm run check
+      - name: Run test suite
+        run: npm test
