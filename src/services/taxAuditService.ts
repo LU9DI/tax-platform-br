@@ -22,7 +22,7 @@ export async function recordTaxCalculation(
   type: string,
   input: unknown,
   output: unknown,
-  ruleVersionId?: string,
+  ruleVersionId: string,
 ) {
   const own = await initDb().query(
     "SELECT id FROM tax_companies WHERE id=$1 AND user_id=$2",
@@ -32,7 +32,7 @@ export async function recordTaxCalculation(
 
   const r = await initDb().query(
     "INSERT INTO tax_calculation_audits(id,company_id,calculation_type,input,output,rule_version_id) VALUES($1,$2,$3,$4,$5,$6) RETURNING *",
-    [randomUUID(), companyId, type, JSON.stringify(input), JSON.stringify(output), ruleVersionId ?? null],
+    [randomUUID(), companyId, type, JSON.stringify(input), JSON.stringify(output), ruleVersionId],
   );
   return r.rows[0];
 }
