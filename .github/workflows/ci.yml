@@ -35,24 +35,8 @@ jobs:
         with:
           node-version: 24
       - run: npm install --no-audit --no-fund
-      - name: Bootstrap application schema
-        run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f src/db/schema.sql
-      - name: Seed disposable CI company
-        run: |
-          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 <<'SQL'
-          INSERT INTO app_users (id,email,password_hash)
-          VALUES ('00000000-0000-4000-8000-000000000001','ci@example.test','not-used')
-          ON CONFLICT (id) DO NOTHING;
-          INSERT INTO tax_companies (id,user_id,legal_name,cnpj,regime)
-          VALUES (
-            '00000000-0000-4000-8000-000000000002',
-            '00000000-0000-4000-8000-000000000001',
-            'CI Test Company',
-            '00000000000191',
-            'mei'
-          )
-          ON CONFLICT (id) DO NOTHING;
-          SQL
+      - name: Bootstrap disposable PostgreSQL database
+        run: npx tsx scripts/ci-bootstrap.ts
       - name: Apply migrations and verify integrity
         run: npx tsx scripts/migrate.ts
       - name: Typecheck
