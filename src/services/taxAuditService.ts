@@ -29,6 +29,29 @@ function ruleSnapshotFromOutput(output: unknown) {
   return snapshot && typeof snapshot === "object" ? snapshot as Record<string, unknown> : null;
 }
 
+export function ruleEvidenceMatches(
+  output: unknown,
+  rule: { id: string; rule_code: string; version: number; parameters: unknown },
+) {
+  const snapshot = ruleSnapshotFromOutput(output);
+  if (!snapshot) return false;
+
+  const expectedSnapshot = {
+    id: rule.id,
+    code: rule.rule_code,
+    version: rule.version,
+    parameters: rule.parameters,
+  };
+  const actualSnapshot = {
+    id: snapshot.id,
+    code: snapshot.code,
+    version: snapshot.version,
+    parameters: snapshot.parameters,
+  };
+
+  return stableJson(actualSnapshot) === stableJson(expectedSnapshot);
+}
+
 export async function recordTaxCalculation(
   companyId: string,
   userId: string,
@@ -58,25 +81,11 @@ export async function recordTaxCalculation(
   );
   if (!rule.rowCount) throw new Error("tax rule version no longer exists");
 
-  const snapshot = ruleSnapshotFromOutput(output);
-  const expectedSnapshot = {
-    id: rule.rows[0].id,
-    code: rule.rows[0].rule_code,
-    version: rule.rows[0].version,
-    parameters: rule.rows[0].parameters,
-  };
-  const actualSnapshot = snapshot && {
-    id: snapshot.id,
-    code: snapshot.code,
-    version: snapshot.version,
-    parameters: snapshot.parameters,
-  };
-
   // effectiveFrom/effectiveTo are intentionally not compared here: publishing
   // a new version may close the old validity window after the calculation has
   // already resolved it. The historical output must retain the original dates,
   // while identity and parameters must remain immutable.
-  if (!actualSnapshot || stableJson(actualSnapshot) !== stableJson(expectedSnapshot)) {
+  if (!ruleEvidenceMatches(output, rule.rows[0])) {
     const error = new Error("calculation evidence does not match the referenced tax rule version");
     (error as Error & { code?: string }).code = "RULE_EVIDENCE_MISMATCH";
     throw error;
