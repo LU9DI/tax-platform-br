@@ -19,7 +19,8 @@ async function verifyMigrationIntegrity(client: any) {
     throw new Error(`migration integrity check failed: pending migrations: ${pending.join(", ")}`);
   }
 
-  const orphaned = Array.from(appliedSet).filter((version: string) => !expected.includes(version));
+  const appliedVersions = Array.from(appliedSet) as string[];
+  const orphaned = appliedVersions.filter((version) => !expected.includes(version));
   if (orphaned.length) {
     throw new Error(`migration integrity check failed: applied migrations missing from repository: ${orphaned.join(", ")}`);
   }
