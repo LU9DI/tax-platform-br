@@ -17,7 +17,7 @@ test("rule evidence stays bound to the resolved version when validity dates chan
   const ruleX = {
     id: "rule-x",
     rule_code: "MEI_2026",
-    version: 1,
+    version: "1",
     parameters: { annual_limit: 81000, das: { commerce: 76.9 } },
   };
 
@@ -26,7 +26,7 @@ test("rule evidence stays bound to the resolved version when validity dates chan
     ruleVersion: {
       id: "rule-x",
       code: "MEI_2026",
-      version: 1,
+      version: "1",
       effectiveFrom: "2026-01-01",
       effectiveTo: "2026-12-31",
       parameters: { annual_limit: 81000, das: { commerce: 76.9 } },
