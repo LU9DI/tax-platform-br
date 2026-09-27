@@ -134,3 +134,9 @@ export function calculateSimplesNationalAnexoI(input: {
     note: "Estimativa pelo Anexo I; o enquadramento e a segregação das receitas devem ser confirmados conforme a legislação e a situação do contribuinte."
   };
 }
+
+export const calculateSimplesNationalAnexoII = (input: {
+  revenue12m: number;
+  monthlyRevenue: number;
+}, rule: SimplesNationalRuleParameters) =>
+  calculateSimplesNationalAnexoI(input, rule);
