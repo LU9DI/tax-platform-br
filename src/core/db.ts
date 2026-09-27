@@ -15,8 +15,20 @@ export function initDb() {
     if (!url) throw new Error("DATABASE_URL is required");
 
     const isLocal = /localhost|127\\.0.0.1/.test(url);
+    // pg warns about legacy sslmode aliases when they are left inside the
+    // connection string. TLS policy is configured explicitly below instead.
+    const connectionUrl = (() => {
+      try {
+        const parsed = new URL(url);
+        parsed.searchParams.delete("sslmode");
+        parsed.searchParams.delete("uselibpqcompat");
+        return parsed.toString();
+      } catch {
+        return url;
+      }
+    })();
     pool = new Pool({
-      connectionString: url,
+      connectionString: connectionUrl,
       ssl: isLocal ? false : { rejectUnauthorized: true },
       max: positiveInt(process.env.PG_POOL_MAX, 5),
       connectionTimeoutMillis: positiveInt(process.env.PG_CONNECT_TIMEOUT_MS, 10000),
