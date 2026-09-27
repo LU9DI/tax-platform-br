@@ -31,7 +31,7 @@ function ruleSnapshotFromOutput(output: unknown) {
 
 export function ruleEvidenceMatches(
   output: unknown,
-  rule: { id: string; rule_code: string; version: number; parameters: unknown },
+  rule: { id: string; rule_code: string; version: string; parameters: unknown },
 ) {
   const snapshot = ruleSnapshotFromOutput(output);
   if (!snapshot) return false;
