@@ -165,8 +165,13 @@ app.use("/api/acquisition/automation", acquisitionAutomationRoutes);
 app.use("/api/acquisition", acquisitionRoutes);
 
 app.get("/api/health", async (_req, res) => {
-  try { await initDb().query("SELECT 1"); res.json({ ok: true, service: "tax-platform-br", database: "ok" }); }
-  catch { res.status(503).json({ ok: false, database: "error" }); }
+  const started = Date.now();
+  try {
+    await initDb().query("SELECT 1");
+    res.json({ ok: true, service: "tax-platform-br", database: "ok", db_latency_ms: Date.now() - started, uptime_s: Math.floor(process.uptime()) });
+  } catch {
+    res.status(503).json({ ok: false, service: "tax-platform-br", database: "error", db_latency_ms: Date.now() - started });
+  }
 });
 app.get("/api/metrics", (req, res) => {
   if (process.env.NODE_ENV === "production" && req.header("x-metrics-token") !== process.env.METRICS_TOKEN) return res.status(401).json({ error: "unauthorized" });
