@@ -8,7 +8,7 @@ import { recordTaxCalculation, getEffectiveTaxRule } from "../services/taxAuditS
 const router=Router();
 const parseLimit=(v:unknown)=>{const n=Number(v??20);return Number.isInteger(n)&&n>=1&&n<=100?n:20;};
 const parseOffset=(v:unknown)=>{const n=Number(v??0);return Number.isInteger(n)&&n>=0&&n<=100000?n:0;};
-const parseIdempotencyKey=(req:any)=>{const key=req.header("idempotency-key")?.trim();return key&&key.length<=200?key:undefined;};
+const parseIdempotencyKey=(req:any)=>{const raw=req.header("idempotency-key");if(raw===undefined)return undefined;const key=raw.trim();if(!key||key.length>200)throw new Error("invalid idempotency key");return key;};
 
 router.post("/profile",requireAuth,async(req,res)=>{try{const p=prepareTaxProfile(req.body);const id=randomUUID();await initDb().query("INSERT INTO tax_profiles (id,user_id,taxpayer_type,country,state,tax_year,data) VALUES ($1,$2,$3,$4,$5,$6,$7) ON CONFLICT(user_id,tax_year) DO UPDATE SET taxpayer_type=EXCLUDED.taxpayer_type,country=EXCLUDED.country,state=EXCLUDED.state,data=EXCLUDED.data,updated_at=now()",[id,(req as any).userId,p.taxpayerType,p.country,p.state??null,p.taxYear,JSON.stringify(req.body||{})]);res.status(201).json({id,profile:p});}catch(e){res.status(400).json({valid:false,error:e instanceof Error?e.message:"invalid tax profile"});}});
 
