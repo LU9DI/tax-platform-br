@@ -14,7 +14,7 @@ function normalizePaidAt(value: string | undefined | null): string | null {
 }
 
 function paymentFingerprint(companyId: string, referenceMonth: string, amount: number, taxCode: string | null, paidAt: string | null): string {
-  const canonical = JSON.stringify([companyId, referenceMonth, amount.toFixed(2), taxCode ?? null, paidAt]);
+  const canonical = [companyId, referenceMonth, amount.toFixed(2), taxCode ?? "", paidAt ?? ""].join("|");
   return createHash("sha256").update(canonical).digest("hex");
 }
 
