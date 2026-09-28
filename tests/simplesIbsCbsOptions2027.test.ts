@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { resolveSimplesNationalIbsCbsOption } from "../src/services/taxService.js";
 
 const RULE = {
-  models: ["simples_puro","simples_hibrido"],
+  models: ["simples_puro","simples_hibrido"] as ["simples_puro","simples_hibrido"],
   first_semester:{start:"2027-01-01",end:"2027-06-30",option_window:{start:"2026-09-01",end:"2026-09-30"},cancellation_deadline:"2026-11-30"},
   second_semester:{start:"2027-07-01",end:"2027-12-31",option_window:{start:"2027-03-01",end:"2027-03-31"},cancellation_deadline:"2027-05-31"},
   regular_ibs_cbs_rates:null
