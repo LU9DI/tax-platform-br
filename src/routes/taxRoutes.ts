@@ -111,8 +111,11 @@ router.post("/simples-nacional/fator-r",requireAuth,calculationRateLimit,async(r
    }else if(elapsed>0&&elapsed<12){
      const priorMonths=req.body?.priorMonths;
      if(!Array.isArray(priorMonths)||priorMonths.length!==elapsed)return res.status(400).json({error:`priorMonths must contain exactly ${elapsed} completed month entries`});
+     const expectedMonths=Array.from({length:elapsed},(_,i)=>{const d=new Date(Date.UTC(year,month-1,1));d.setUTCMonth(d.getUTCMonth()-(elapsed-i));return {year:d.getUTCFullYear(),month:d.getUTCMonth()+1};});
+     const invalidPeriod=priorMonths.some((item:any,i:number)=>Number(item?.year)!==expectedMonths[i].year||Number(item?.month)!==expectedMonths[i].month);
+     if(invalidPeriod)return res.status(400).json({error:"priorMonths must identify each completed month in chronological order from the opening month through the month before the calculation period"});
      if(priorMonths.some((item:any)=>!item||!Number.isFinite(Number(item.fs))||Number(item.fs)<0||!Number.isFinite(Number(item.revenue))||Number(item.revenue)<0))return res.status(400).json({error:"priorMonths entries must contain non-negative numeric fs and revenue"});
-     periodContext={mode:"startup",priorMonths:priorMonths.map((item:any)=>({fs:Number(item.fs),revenue:Number(item.revenue)}))};
+     periodContext={mode:"startup",priorMonths:priorMonths.map((item:any)=>({year:Number(item.year),month:Number(item.month),fs:Number(item.fs),revenue:Number(item.revenue)}))};
    }else if(elapsed<0){
      return res.status(400).json({error:"activityStartDate cannot be after calculation period"});
    }
