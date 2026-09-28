@@ -215,7 +215,7 @@ export function calculateFatorR(input: FatorRInput, rule: FatorRRuleParameters, 
   const fs12 = employee + individual + thirteenth + cpp + fgts;
   let factorNumerator = fs12;
   let factorDenominator = revenue12m;
-  let factorBasis: "FS12_RBT12" | "FSPA_RPA" | "startup_prior_months" = "FS12_RBT12";
+  let factorBasis: "FS12_RBT12" | "FSPA_RPA" | "startup_prior_months" | "startup_fixed_rule" = "FS12_RBT12";
 
   if (periodContext.mode === "opening_month") {
     const fspa = finiteNonNegative(periodContext.fspa, "fspa");
