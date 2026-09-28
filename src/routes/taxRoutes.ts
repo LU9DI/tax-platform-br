@@ -92,7 +92,32 @@ router.post("/simples-nacional/fator-r",requireAuth,calculationRateLimit,async(r
    employerSocialSecurityContribution12m:Number(req.body?.employerSocialSecurityContribution12m),
    fgts12m:Number(req.body?.fgts12m)
  };
- const factor=calculateFatorR(factorInput,factorRule.parameters as any);
+ const activityStartDateRaw=typeof req.body?.activityStartDate==="string"&&req.body.activityStartDate.trim()?req.body.activityStartDate.trim():null;
+ let activityStartDate:Date|null=null;
+ let periodContext:any={mode:"established"};
+ if(activityStartDateRaw){
+   const parsed=new Date(activityStartDateRaw+"T00:00:00Z");
+   if(Number.isNaN(parsed.getTime()))return res.status(400).json({error:"invalid activityStartDate"});
+   if(parsed>period)return res.status(400).json({error:"activityStartDate cannot be after calculation period"});
+   activityStartDate=parsed;
+   const startIndex=parsed.getUTCFullYear()*12+parsed.getUTCMonth();
+   const periodIndex=year*12+(month-1);
+   const elapsed=periodIndex-startIndex;
+   const fspa=Number(req.body?.fspa);
+   const rpa=Number(req.body?.rpa);
+   if(elapsed===0){
+     if(!Number.isFinite(fspa)||fspa<0||!Number.isFinite(rpa)||rpa<0)return res.status(400).json({error:"fspa and rpa are required and must be non-negative numbers for the opening month"});
+     periodContext={mode:"opening_month",fspa,rpa};
+   }else if(elapsed>0&&elapsed<12){
+     const priorMonths=req.body?.priorMonths;
+     if(!Array.isArray(priorMonths)||priorMonths.length!==elapsed)return res.status(400).json({error:`priorMonths must contain exactly ${elapsed} completed month entries`});
+     if(priorMonths.some((item:any)=>!item||!Number.isFinite(Number(item.fs))||Number(item.fs)<0||!Number.isFinite(Number(item.revenue))||Number(item.revenue)<0))return res.status(400).json({error:"priorMonths entries must contain non-negative numeric fs and revenue"});
+     periodContext={mode:"startup",priorMonths:priorMonths.map((item:any)=>({fs:Number(item.fs),revenue:Number(item.revenue)}))};
+   }else if(elapsed<0){
+     return res.status(400).json({error:"activityStartDate cannot be after calculation period"});
+   }
+ }
+ const factor=calculateFatorR(factorInput,factorRule.parameters as any,periodContext);
  const activityCnae=typeof req.body?.activityCnae==="string"&&req.body.activityCnae.trim()?req.body.activityCnae.trim():null;
  let activityClassification:any=null;
  let activityClassificationRule:any=null;
