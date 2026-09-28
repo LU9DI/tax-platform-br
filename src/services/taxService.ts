@@ -91,26 +91,26 @@ export type SimplesNationalRuleParameters = {
   brackets: SimplesNationalBracket[];
 };
 
-export function calculateSimplesNationalAnexoI(input: {
+export function calculateSimplesNationalBracketed(input: {
   revenue12m: number;
   monthlyRevenue: number;
 }, rule: SimplesNationalRuleParameters) {
   const revenue12m = finiteNonNegative(input.revenue12m, "revenue12m");
   const monthlyRevenue = finiteNonNegative(input.monthlyRevenue, "monthlyRevenue");
   if (!Array.isArray(rule?.brackets) || rule.brackets.length !== 6) {
-    throw new Error("invalid Simples Nacional Anexo I rule parameters");
+    throw new Error("invalid Simples Nacional bracket rule parameters");
   }
   const bracket = rule.brackets.find((item) =>
     Number.isFinite(item.max_revenue_12m) &&
     revenue12m <= item.max_revenue_12m
   );
-  if (!bracket) throw new Error("revenue12m exceeds Simples Nacional Anexo I limit");
+  if (!bracket) throw new Error("revenue12m exceeds Simples Nacional limit");
 
   const nominalRate = Number(bracket.nominal_rate);
   const deduction = Number(bracket.deduction);
   if (!Number.isFinite(nominalRate) || nominalRate < 0 ||
       !Number.isFinite(deduction) || deduction < 0) {
-    throw new Error("invalid Simples Nacional Anexo I bracket parameters");
+    throw new Error("invalid Simples Nacional bracket parameters");
   }
 
   const effectiveRate = revenue12m === 0
@@ -131,9 +131,29 @@ export function calculateSimplesNationalAnexoI(input: {
     deduction: Math.round(deduction * 100) / 100,
     effectiveRate: Math.round(effectiveRate * 1000000) / 1000000,
     estimatedMonthlyTax: Math.round(monthlyRevenue * effectiveRate * 100) / 100,
-    note: "Estimativa pelo Anexo I; o enquadramento e a segregação das receitas devem ser confirmados conforme a legislação e a situação do contribuinte."
+    note: "Estimativa pelo anexo efetivo; o enquadramento e a segregação das receitas devem ser confirmados conforme a legislação e a situação do contribuinte."
   };
 }
+
+export function calculateSimplesNationalAnexoI(input: {
+  revenue12m: number;
+  monthlyRevenue: number;
+}, rule: SimplesNationalRuleParameters) {
+  return calculateSimplesNationalBracketed(input, rule);
+}
+
+export function calculateSimplesNationalByAnnex(input: {
+  revenue12m: number;
+  monthlyRevenue: number;
+}, rule: SimplesNationalRuleParameters) {
+  return calculateSimplesNationalBracketed(input, rule);
+}
+
+export const calculateSimplesNationalAnexoII = (input: {
+  revenue12m: number;
+  monthlyRevenue: number;
+}, rule: SimplesNationalRuleParameters) =>
+  calculateSimplesNationalBracketed(input, rule);
 
 
 export type FatorRInput = {
