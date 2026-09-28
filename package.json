@@ -5,8 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "tsx server.ts",
-    "start": "tsx scripts/migrate.ts && tsx server.ts",
+    "start": "tsx server.ts",
     "build": "tsc --noEmit",
+    "precheck": "tsx scripts/renderBuildMigrate.ts",
     "check": "tsc --noEmit",
     "test": "tsx --test tests/**/*.test.ts"
   },
