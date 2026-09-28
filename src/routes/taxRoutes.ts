@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { randomUUID } from "node:crypto";
-import { prepareTaxProfile, simulateConsumptionTransition, calculateMeiLoad, calculateSimplesNationalAnexoI, calculateSimplesNationalAnexoII, calculateSimplesNationalByAnnex, calculateFatorR } from "../services/taxService.js";
+import { prepareTaxProfile, simulateConsumptionTransition, calculateMeiLoad, calculateSimplesNationalAnexoI, calculateSimplesNationalAnexoII, calculateSimplesNationalByAnnex, calculateFatorR, resolveSimplesNationalMonthlyRevenue } from "../services/taxService.js";
 import { classifyFactorRActivity } from "../services/taxActivityClassificationService.js";
 import { initDb } from "../core/db.js";
 import { requireAuth } from "../middleware/auth.js";
@@ -153,7 +153,17 @@ router.post("/simples-nacional/fator-r",requireAuth,calculationRateLimit,async(r
  const annexCode=`SIMPLES_NACIONAL_ANEXO_${factor.effectiveAnnex}_${year}`;
  const annexRule=await getEffectiveTaxRule(annexCode,period);
  if(!annexRule)return res.status(404).json({error:"effective Simples Nacional annex rule not found for requested period"});
- const monthlyRevenue=Number(req.body?.monthlyRevenue);
+ let monthlyRevenue=Number(req.body?.monthlyRevenue);
+ let revenueRecognitionRule:any=null;
+ let revenueRecognition:any=null;
+ if(year>=2027){
+   revenueRecognitionRule=await getEffectiveTaxRule(`SIMPLES_NACIONAL_REVENUE_RECOGNITION_${year}`,period);
+   if(!revenueRecognitionRule)return res.status(404).json({error:"revenue recognition rule not found for requested period"});
+   revenueRecognition=resolveSimplesNationalMonthlyRevenue({year,grossRevenueAccrued:req.body?.grossRevenueAccrued},revenueRecognitionRule.parameters as any);
+   monthlyRevenue=revenueRecognition.monthlyRevenue;
+ } else {
+   if(!Number.isFinite(monthlyRevenue)||monthlyRevenue<0)return res.status(400).json({error:"monthlyRevenue must be a non-negative number"});
+ }
  const annexOutput=calculateSimplesNationalByAnnex({revenue12m:factor.revenue12m,monthlyRevenue},annexRule.parameters as any);
  const companyId=typeof req.body?.companyId==="string"&&req.body.companyId.trim()?req.body.companyId.trim():null;
  if(!companyId)return res.status(400).json({error:"companyId is required for audited calculations"});
@@ -168,7 +178,8 @@ router.post("/simples-nacional/fator-r",requireAuth,calculationRateLimit,async(r
    activityClassification: activityClassification ? { ...activityClassification, ruleVersion:{id:activityClassificationRule.id,code:activityClassificationRule.rule_code,version:activityClassificationRule.version,effectiveFrom:activityClassificationRule.effective_from,effectiveTo:activityClassificationRule.effective_to,sourceUrl:activityClassificationRule.source_url,sourceReference:activityClassificationRule.source_reference,parameters:activityClassificationRule.parameters} } : null,
    annexCalculation:annexOutput,
    factorRuleVersion:{id:factorRule.id,code:factorRule.rule_code,version:factorRule.version,effectiveFrom:factorRule.effective_from,effectiveTo:factorRule.effective_to,sourceUrl:factorRule.source_url,sourceReference:factorRule.source_reference,parameters:factorRule.parameters},
-   annexRuleVersion:{id:annexRule.id,code:annexRule.rule_code,version:annexRule.version,effectiveFrom:annexRule.effective_from,effectiveTo:annexRule.effective_to,sourceUrl:annexRule.source_url,sourceReference:annexRule.source_reference,parameters:annexRule.parameters}
+   annexRuleVersion:{id:annexRule.id,code:annexRule.rule_code,version:annexRule.version,effectiveFrom:annexRule.effective_from,effectiveTo:annexRule.effective_to,sourceUrl:annexRule.source_url,sourceReference:annexRule.source_reference,parameters:annexRule.parameters},
+   revenueRecognition: revenueRecognition ? {...revenueRecognition,ruleVersion:{id:revenueRecognitionRule.id,code:revenueRecognitionRule.rule_code,version:revenueRecognitionRule.version,effectiveFrom:revenueRecognitionRule.effective_from,effectiveTo:revenueRecognitionRule.effective_to,sourceUrl:revenueRecognitionRule.source_url,sourceReference:revenueRecognitionRule.source_reference,parameters:revenueRecognitionRule.parameters}} : null
  };
  const audit=await recordTaxCalculation(companyId,(req as any).userId,"simples_nacional_fator_r",input,enriched,factorRule.id,parseIdempotencyKey(req));
  if(!audit)return res.status(403).json({error:"company not found or not owned by user"});
