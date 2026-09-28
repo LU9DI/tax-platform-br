@@ -191,7 +191,7 @@ export type FatorRPeriodContext =
     }
   | {
       mode: "startup";
-      priorMonths: Array<{ fs: number; revenue: number }>;
+      priorMonths: Array<{ year: number; month: number; fs: number; revenue: number }>;
     };
 
 export function calculateFatorR(input: FatorRInput, rule: FatorRRuleParameters, periodContext: FatorRPeriodContext = { mode: "established" }) {
