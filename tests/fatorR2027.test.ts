@@ -5,7 +5,7 @@ import { calculateFatorR } from "../src/services/taxService.js";
 const RULE={
   threshold:0.28,
   period_months:12,
-  ratio:"FS12_RBT12",
+  ratio:"FS12/RBT12",
   fs12:{includes:[],excludes_examples:[]},
   rbt12:{basis:"12_months_antecedent_to_month_before_PA"},
   selection:{greater_or_equal_threshold:"III",below_threshold:"V"},
