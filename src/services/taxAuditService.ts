@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
+import type { PoolClient } from "pg";
 import { initDb } from "../core/db.js";
 
 export type TaxRuleEvidenceReference = { id: string; role: string };
@@ -91,7 +92,7 @@ function ruleEvidenceMatchesSnapshot(
 }
 
 async function collectRuleEvidence(
-  db: ReturnType<typeof initDb>,
+  db: PoolClient,
   output: unknown,
   primaryRuleId: string,
 ): Promise<TaxRuleEvidenceReference[]> {
