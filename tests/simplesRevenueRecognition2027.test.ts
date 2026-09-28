@@ -25,7 +25,7 @@ test("2027 Simples rejects missing accrued revenue",()=>{
 
 test("2027 Simples rejects an incompatible recognition rule",()=>{
   assert.throws(
-    ()=>resolveSimplesNationalMonthlyRevenue({year:2027,grossRevenueAccrued:1000},{...RULE,cash_regime_for_monthly_calculation:true as false}),
+    ()=>resolveSimplesNationalMonthlyRevenue({year:2027,grossRevenueAccrued:1000},{...RULE,cash_regime_for_monthly_calculation:true}),
     /unsupported Simples Nacional revenue recognition rule/
   );
 });
