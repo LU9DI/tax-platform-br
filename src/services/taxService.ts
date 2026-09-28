@@ -91,6 +91,16 @@ export type SimplesNationalRuleParameters = {
   brackets: SimplesNationalBracket[];
 };
 
+export type RevenueRecognitionRuleParameters = { monthly_basis: "gross_revenue_accrued"; cash_regime_for_monthly_calculation: false; goods_services_recognition: "operation_billing"; fiscal_document_as_general_reference: boolean; };
+
+export function resolveSimplesNationalMonthlyRevenue(input: { year: number; grossRevenueAccrued?: number }, rule: RevenueRecognitionRuleParameters) {
+  if (!Number.isInteger(input.year)) throw new Error("year must be an integer");
+  if (rule?.monthly_basis !== "gross_revenue_accrued" || rule?.cash_regime_for_monthly_calculation !== false) throw new Error("unsupported Simples Nacional revenue recognition rule");
+  if (input.grossRevenueAccrued === undefined) throw new Error("grossRevenueAccrued is required for the applicable revenue recognition rule");
+  const monthlyRevenue = finiteNonNegative(input.grossRevenueAccrued, "grossRevenueAccrued");
+  return { monthlyRevenue, revenueRecognitionBasis: rule.monthly_basis, grossRevenueAccrued: monthlyRevenue };
+}
+
 export function calculateSimplesNationalBracketed(input: {
   revenue12m: number;
   monthlyRevenue: number;
