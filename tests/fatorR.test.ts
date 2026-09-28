@@ -70,3 +70,29 @@ test("Fator R keeps the 12-month input components explicit",()=>{
     fgts12m:4000
   });
 });
+
+test("Fator R opening month uses FSPA/RPA",()=>{
+  const r=calculateFatorR({
+    revenue12m:0,employeeAndAvulsoRemuneration12m:0,individualContributorRemuneration12m:0,
+    thirteenthSalary12m:0,employerSocialSecurityContribution12m:0,fgts12m:0
+  },RULE,{mode:"opening_month",fspa:2800,rpa:10000});
+  assert.equal(r.factorBasis,"FSPA_RPA");
+  assert.equal(r.factorNumerator,2800);
+  assert.equal(r.factorDenominator,10000);
+  assert.equal(r.factorR,0.28);
+  assert.equal(r.effectiveAnnex,"III");
+});
+
+test("Fator R startup period uses completed months before PA",()=>{
+  const r=calculateFatorR({
+    revenue12m:999999,employeeAndAvulsoRemuneration12m:0,individualContributorRemuneration12m:0,
+    thirteenthSalary12m:0,employerSocialSecurityContribution12m:0,fgts12m:0
+  },RULE,{mode:"startup",priorMonths:[
+    {fs:2000,revenue:10000},{fs:2500,revenue:10000}
+  ]});
+  assert.equal(r.factorBasis,"startup_prior_months");
+  assert.equal(r.factorNumerator,4500);
+  assert.equal(r.factorDenominator,20000);
+  assert.equal(r.factorR,0.225);
+  assert.equal(r.effectiveAnnex,"V");
+});
