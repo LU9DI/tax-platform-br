@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { randomUUID } from "node:crypto";
-import { prepareTaxProfile, simulateConsumptionTransition, calculateMeiLoad, calculateSimplesNationalAnexoI, calculateSimplesNationalAnexoII } from "../services/taxService.js";
+import { prepareTaxProfile, simulateConsumptionTransition, calculateMeiLoad, calculateSimplesNationalAnexoI, calculateSimplesNationalAnexoII, calculateFatorR } from "../services/taxService.js";
 import { initDb } from "../core/db.js";
 import { requireAuth } from "../middleware/auth.js";
 import { calculationRateLimit } from "../middleware/calculationRateLimit.js";
@@ -73,6 +73,51 @@ router.post("/simples-nacional/anexo-i",requireAuth,calculationRateLimit,async(r
  if(!audit)return res.status(403).json({error:"company not found or not owned by user"});
  res.json(enriched);
 }catch(e){if(e instanceof Error && (e as Error & {code?:string}).code==="IDEMPOTENCY_CONFLICT")return res.status(409).json({error:e.message});if(e instanceof Error && (e as Error & {code?:string}).code==="54000")return res.status(429).json({error:e.message});res.status(400).json({error:e instanceof Error?e.message:"invalid Simples Nacional data"});}});
+
+router.post("/simples-nacional/fator-r",requireAuth,calculationRateLimit,async(req,res)=>{try{
+ const year=Number(req.body?.year??new Date().getUTCFullYear());
+ const month=Number(req.body?.month??new Date().getUTCMonth()+1);
+ if(!Number.isInteger(year)||year<2020||year>2100)return res.status(400).json({error:"year must be a valid integer"});
+ if(!Number.isInteger(month)||month<1||month>12)return res.status(400).json({error:"month must be between 1 and 12"});
+ const period=new Date(Date.UTC(year,month-1,1));
+ const factorRuleCode=typeof req.body?.factorRuleCode==="string"&&req.body.factorRuleCode.trim()?req.body.factorRuleCode.trim():"SIMPLES_NACIONAL_FATOR_R_2026";
+ const factorRule=await getEffectiveTaxRule(factorRuleCode,period);
+ if(!factorRule)return res.status(404).json({error:"Fator R rule not found for requested period"});
+ const factorInput={
+   revenue12m:Number(req.body?.revenue12m),
+   employeeAndAvulsoRemuneration12m:Number(req.body?.employeeAndAvulsoRemuneration12m),
+   individualContributorRemuneration12m:Number(req.body?.individualContributorRemuneration12m),
+   thirteenthSalary12m:Number(req.body?.thirteenthSalary12m),
+   employerSocialSecurityContribution12m:Number(req.body?.employerSocialSecurityContribution12m),
+   fgts12m:Number(req.body?.fgts12m)
+ };
+ const factor=calculateFatorR(factorInput,factorRule.parameters as any);
+ const annexCode=factor.effectiveAnnex==="III"?"SIMPLES_NACIONAL_ANEXO_III_2026":"SIMPLES_NACIONAL_ANEXO_V_2026";
+ const annexRule=await getEffectiveTaxRule(annexCode,period);
+ if(!annexRule)return res.status(404).json({error:"effective Simples Nacional annex rule not found for requested period"});
+ const monthlyRevenue=Number(req.body?.monthlyRevenue);
+ const annexOutput=calculateSimplesNationalAnexoI({revenue12m:factor.revenue12m,monthlyRevenue},annexRule.parameters as any);
+ const companyId=typeof req.body?.companyId==="string"&&req.body.companyId.trim()?req.body.companyId.trim():null;
+ if(!companyId)return res.status(400).json({error:"companyId is required for audited calculations"});
+ const input={...factorInput,monthlyRevenue,year,month};
+ const enriched={
+   regime:"simples_nacional",
+   calculationType:"fator_r",
+   period:{year,month},
+   factorR:{...factor},
+   effectiveAnnex:factor.effectiveAnnex,
+   annexCalculation:annexOutput,
+   factorRuleVersion:{id:factorRule.id,code:factorRule.rule_code,version:factorRule.version,effectiveFrom:factorRule.effective_from,effectiveTo:factorRule.effective_to,sourceUrl:factorRule.source_url,sourceReference:factorRule.source_reference,parameters:factorRule.parameters},
+   annexRuleVersion:{id:annexRule.id,code:annexRule.rule_code,version:annexRule.version,effectiveFrom:annexRule.effective_from,effectiveTo:annexRule.effective_to,sourceUrl:annexRule.source_url,sourceReference:annexRule.source_reference,parameters:annexRule.parameters}
+ };
+ const audit=await recordTaxCalculation(companyId,(req as any).userId,"simples_nacional_fator_r",input,enriched,factorRule.id,parseIdempotencyKey(req));
+ if(!audit)return res.status(403).json({error:"company not found or not owned by user"});
+ res.json(enriched);
+}catch(e){
+ if(e instanceof Error && (e as Error & {code?:string}).code==="IDEMPOTENCY_CONFLICT")return res.status(409).json({error:e.message});
+ if(e instanceof Error && (e as Error & {code?:string}).code==="54000")return res.status(429).json({error:e.message});
+ res.status(400).json({error:e instanceof Error?e.message:"invalid Fator R data"});
+}});
 router.get("/rules/effective",async(req,res)=>{try{const code=String(req.query.code||"").trim();if(!code)return res.status(400).json({error:"code is required"});const at=req.query.at?new Date(String(req.query.at)):new Date();if(Number.isNaN(at.getTime()))return res.status(400).json({error:"invalid date"});const rule=await getEffectiveTaxRule(code,at);if(!rule)return res.status(404).json({error:"effective rule not found"});res.json({rule});}catch{res.status(500).json({error:"failed to resolve effective tax rule"});}});
 router.get("/calculation-audits",requireAuth,async(req,res)=>{try{const companyId=String(req.query.companyId||"");if(!companyId)return res.status(400).json({error:"companyId is required"});const limit=parseLimit(req.query.limit),offset=parseOffset(req.query.offset),db=initDb();const own=await db.query("SELECT id,legal_name,cnpj FROM tax_companies WHERE id=$1 AND user_id=$2",[companyId,(req as any).userId]);if(!own.rowCount)return res.status(404).json({error:"company not found"});const r=await db.query("SELECT id,calculation_type,input,output,rule_version_id,created_at FROM tax_calculation_audits WHERE company_id=$1 ORDER BY created_at DESC LIMIT $2 OFFSET $3",[companyId,limit,offset]);const count=await db.query("SELECT COUNT(*)::int count FROM tax_calculation_audits WHERE company_id=$1",[companyId]);return res.json({company:own.rows[0],audits:r.rows,pagination:{limit,offset,total:Number(count.rows[0].count),hasMore:offset+r.rows.length<Number(count.rows[0].count)}});}catch{res.status(500).json({error:"failed to load calculation audits"});}});
 
