@@ -80,6 +80,8 @@ router.post("/simples-nacional/anexo-i",requireAuth,calculationRateLimit,async(r
  if(year!==2027||!/^(2027)-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$/.test(period))return res.status(400).json({error:"period must be a valid date in 2027"});
  const companyId=typeof req.body?.companyId==="string"&&req.body.companyId.trim()?req.body.companyId.trim():null;
  if(!companyId)return res.status(400).json({error:"companyId is required for audited calculations"});
+ const ownership=await initDb().query("SELECT id FROM tax_companies WHERE id=$1 AND user_id=$2",[companyId,(req as any).userId]);
+ if(!ownership.rowCount)return res.status(403).json({error:"company not found or not owned by user"});
  const rule=await getEffectiveTaxRule("SIMPLES_NACIONAL_IBS_CBS_OPTIONS_2027",new Date(period+"T00:00:00Z"));
  if(!rule)return res.status(404).json({error:"IBS/CBS option rule not found for requested period"});
  const requestedModel=req.body?.optionModel==="simples_hibrido"?"simples_hibrido":req.body?.optionModel==="simples_puro"?"simples_puro":undefined;

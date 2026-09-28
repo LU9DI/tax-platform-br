@@ -1,5 +1,5 @@
+import { randomUUID } from "node:crypto";
 import { initDb } from "../core/db.js";
-import type { PoolClient } from "pg";
 import type { SimplesNationalIbsCbsOptionRule } from "./taxService.js";
 
 type EventType = "elected" | "cancelled";
@@ -43,7 +43,7 @@ export async function recordIbsCbsOptionEvent(input:{companyId:string;eventType:
  if(now<windowStart||now>deadline)throw new Error("IBS/CBS option event is outside the applicable option/cancellation window");
  if(input.eventType==="cancelled" && now>deadline)throw new Error("IBS/CBS cancellation deadline has passed");
  if(input.eventType==="elected" && now>windowEnd)throw new Error("IBS/CBS election window has closed");
- const id=crypto.randomUUID();
+ const id=randomUUID();
  await db.query("INSERT INTO tax_company_ibs_cbs_option_events (id,company_id,event_type,model,effective_from,effective_to,option_window_start,option_window_end,cancellation_deadline,rule_version_id) VALUES ($1,$2,$3,'simples_hibrido',$4,$5,$6,$7,$8,$9) ON CONFLICT (company_id,effective_from,effective_to,event_type) DO NOTHING",[id,input.companyId,input.eventType,effectiveFrom,effectiveTo,window.start,window.end,cancellationDeadline,input.ruleVersionId]);
  return id;
 }
