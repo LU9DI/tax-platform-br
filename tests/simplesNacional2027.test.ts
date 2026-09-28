@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { calculateSimplesNationalByAnnex } from "../src/services/taxService.js";
 
-const anexoIII={annex:"III" as const,activity:"services_factor_r",brackets:[
+const anexoIII={annex:"III" as const,activity:"services_factor_r" as const,brackets:[
 {max_revenue_12m:180000,nominal_rate:0.06,deduction:0},
 {max_revenue_12m:360000,nominal_rate:0.112,deduction:9360},
 {max_revenue_12m:720000,nominal_rate:0.135,deduction:17640},
