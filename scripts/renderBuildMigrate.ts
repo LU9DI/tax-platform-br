@@ -4,5 +4,5 @@ if (process.env.RENDER !== "true") {
 }
 
 console.log("render build migration: starting database migrations and integrity verification");
-await import("./migrate.ts");
+await import("./migrate.js");
 console.log("render build migration: completed");
