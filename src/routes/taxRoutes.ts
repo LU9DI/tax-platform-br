@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { randomUUID } from "node:crypto";
-import { prepareTaxProfile, simulateConsumptionTransition, calculateMeiLoad, calculateSimplesNationalAnexoI, calculateSimplesNationalAnexoII, calculateFatorR } from "../services/taxService.js";
+import { prepareTaxProfile, simulateConsumptionTransition, calculateMeiLoad, calculateSimplesNationalAnexoI, calculateSimplesNationalAnexoII, calculateSimplesNationalByAnnex, calculateFatorR } from "../services/taxService.js";
+import { classifyFactorRActivity } from "../services/taxActivityClassificationService.js";
 import { initDb } from "../core/db.js";
 import { requireAuth } from "../middleware/auth.js";
 import { calculationRateLimit } from "../middleware/calculationRateLimit.js";
@@ -92,11 +93,33 @@ router.post("/simples-nacional/fator-r",requireAuth,calculationRateLimit,async(r
    fgts12m:Number(req.body?.fgts12m)
  };
  const factor=calculateFatorR(factorInput,factorRule.parameters as any);
+ const activityCnae=typeof req.body?.activityCnae==="string"&&req.body.activityCnae.trim()?req.body.activityCnae.trim():null;
+ let activityClassification:any=null;
+ let activityClassificationRule:any=null;
+ if(activityCnae){
+   activityClassificationRule=await getEffectiveTaxRule("SIMPLES_NACIONAL_FATOR_R_ACTIVITY_CLASSIFICATION_2026",period);
+   if(!activityClassificationRule)return res.status(404).json({error:"Fator R activity classification rule not found for requested period"});
+   activityClassification=classifyFactorRActivity({type:"CNAE",value:activityCnae},activityClassificationRule.parameters as any);
+   if(activityClassification.status==="unknown"){
+     return res.status(422).json({
+       error:"activity classification required",
+       code:"FACTOR_R_ACTIVITY_CLASSIFICATION_REQUIRED",
+       activityClassification
+     });
+   }
+   if(activityClassification.status!=="factor_r_subject"){
+     return res.status(422).json({
+       error:"activity is not subject to Fator R",
+       code:"ACTIVITY_NOT_SUBJECT_TO_FACTOR_R",
+       activityClassification
+     });
+   }
+ }
  const annexCode=factor.effectiveAnnex==="III"?"SIMPLES_NACIONAL_ANEXO_III_2026":"SIMPLES_NACIONAL_ANEXO_V_2026";
  const annexRule=await getEffectiveTaxRule(annexCode,period);
  if(!annexRule)return res.status(404).json({error:"effective Simples Nacional annex rule not found for requested period"});
  const monthlyRevenue=Number(req.body?.monthlyRevenue);
- const annexOutput=calculateSimplesNationalAnexoI({revenue12m:factor.revenue12m,monthlyRevenue},annexRule.parameters as any);
+ const annexOutput=calculateSimplesNationalByAnnex({revenue12m:factor.revenue12m,monthlyRevenue},annexRule.parameters as any);
  const companyId=typeof req.body?.companyId==="string"&&req.body.companyId.trim()?req.body.companyId.trim():null;
  if(!companyId)return res.status(400).json({error:"companyId is required for audited calculations"});
  const input={...factorInput,monthlyRevenue,year,month};
@@ -106,6 +129,7 @@ router.post("/simples-nacional/fator-r",requireAuth,calculationRateLimit,async(r
    period:{year,month},
    factorR:{...factor},
    effectiveAnnex:factor.effectiveAnnex,
+   activityClassification: activityClassification ? { ...activityClassification, ruleVersion:{id:activityClassificationRule.id,code:activityClassificationRule.rule_code,version:activityClassificationRule.version,effectiveFrom:activityClassificationRule.effective_from,effectiveTo:activityClassificationRule.effective_to,sourceUrl:activityClassificationRule.source_url,sourceReference:activityClassificationRule.source_reference,parameters:activityClassificationRule.parameters} } : null,
    annexCalculation:annexOutput,
    factorRuleVersion:{id:factorRule.id,code:factorRule.rule_code,version:factorRule.version,effectiveFrom:factorRule.effective_from,effectiveTo:factorRule.effective_to,sourceUrl:factorRule.source_url,sourceReference:factorRule.source_reference,parameters:factorRule.parameters},
    annexRuleVersion:{id:annexRule.id,code:annexRule.rule_code,version:annexRule.version,effectiveFrom:annexRule.effective_from,effectiveTo:annexRule.effective_to,sourceUrl:annexRule.source_url,sourceReference:annexRule.source_reference,parameters:annexRule.parameters}
