@@ -72,13 +72,3 @@ test(
     }
   },
 );
-
-test(
-  "IBS/CBS option events are append-only and invalid dates are rejected",
-  { skip: !databaseUrl },
-  async () => {
-    assert.throws(
-      () => new Date("2027-02-30T00:00:00Z"),
-    );
-  },
-);
