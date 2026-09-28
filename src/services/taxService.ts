@@ -180,6 +180,9 @@ export type FatorRRuleParameters = {
     greater_or_equal_threshold: "III";
     below_threshold: "V";
   };
+  startup_fixed_months?: number;
+  startup_fixed_factor?: number;
+  window_basis?: string;
 };
 
 export type FatorRPeriodContext =
@@ -217,14 +220,26 @@ export function calculateFatorR(input: FatorRInput, rule: FatorRRuleParameters, 
   if (periodContext.mode === "opening_month") {
     const fspa = finiteNonNegative(periodContext.fspa, "fspa");
     const rpa = finiteNonNegative(periodContext.rpa, "rpa");
-    factorNumerator = fspa;
-    factorDenominator = rpa;
-    factorBasis = "FSPA_RPA";
+    if (Number(rule.startup_fixed_months) >= 1) {
+      factorNumerator = Number(rule.startup_fixed_factor ?? threshold);
+      factorDenominator = 1;
+      factorBasis = "startup_fixed_rule";
+    } else {
+      factorNumerator = fspa;
+      factorDenominator = rpa;
+      factorBasis = "FSPA_RPA";
+    }
   } else if (periodContext.mode === "startup") {
     if (!Array.isArray(periodContext.priorMonths)) throw new Error("priorMonths must be an array");
-    factorNumerator = periodContext.priorMonths.reduce((sum, item) => sum + finiteNonNegative(item.fs, "prior month fs"), 0);
-    factorDenominator = periodContext.priorMonths.reduce((sum, item) => sum + finiteNonNegative(item.revenue, "prior month revenue"), 0);
-    factorBasis = "startup_prior_months";
+    if (Number(rule.startup_fixed_months) >= 2) {
+      factorNumerator = Number(rule.startup_fixed_factor ?? threshold);
+      factorDenominator = 1;
+      factorBasis = "startup_fixed_rule";
+    } else {
+      factorNumerator = periodContext.priorMonths.reduce((sum, item) => sum + finiteNonNegative(item.fs, "prior month fs"), 0);
+      factorDenominator = periodContext.priorMonths.reduce((sum, item) => sum + finiteNonNegative(item.revenue, "prior month revenue"), 0);
+      factorBasis = "startup_prior_months";
+    }
   }
 
   let factorR: number;
