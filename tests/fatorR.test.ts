@@ -40,15 +40,16 @@ test("Fator R below 28% resolves to Anexo V",()=>{
   assert.equal(r.effectiveAnnex,"V");
 });
 
-test("Fator R rejects zero revenue denominator",()=>{
-  assert.throws(()=>calculateFatorR({
-    revenue12m:0,
-    employeeAndAvulsoRemuneration12m:1,
-    individualContributorRemuneration12m:0,
-    thirteenthSalary12m:0,
-    employerSocialSecurityContribution12m:0,
-    fgts12m:0
-  },RULE),/revenue12m must be greater than zero/);
+test("Fator R with zero FS12 and zero RBT12 uses 0.01",()=>{
+  const r=calculateFatorR({revenue12m:0,employeeAndAvulsoRemuneration12m:0,individualContributorRemuneration12m:0,thirteenthSalary12m:0,employerSocialSecurityContribution12m:0,fgts12m:0},RULE);
+  assert.equal(r.factorR,0.01);
+  assert.equal(r.effectiveAnnex,"V");
+});
+
+test("Fator R with FS12 positive and RBT12 zero uses 0.28",()=>{
+  const r=calculateFatorR({revenue12m:0,employeeAndAvulsoRemuneration12m:1000,individualContributorRemuneration12m:0,thirteenthSalary12m:0,employerSocialSecurityContribution12m:0,fgts12m:0},RULE);
+  assert.equal(r.factorR,0.28);
+  assert.equal(r.effectiveAnnex,"III");
 });
 
 test("Fator R keeps the 12-month input components explicit",()=>{
