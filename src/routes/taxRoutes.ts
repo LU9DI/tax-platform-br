@@ -81,7 +81,7 @@ router.post("/simples-nacional/fator-r",requireAuth,calculationRateLimit,async(r
  if(!Number.isInteger(year)||year<2020||year>2100)return res.status(400).json({error:"year must be a valid integer"});
  if(!Number.isInteger(month)||month<1||month>12)return res.status(400).json({error:"month must be between 1 and 12"});
  const period=new Date(Date.UTC(year,month-1,1));
- const factorRuleCode=typeof req.body?.factorRuleCode==="string"&&req.body.factorRuleCode.trim()?req.body.factorRuleCode.trim():"SIMPLES_NACIONAL_FATOR_R_2026";
+ const factorRuleCode=typeof req.body?.factorRuleCode==="string"&&req.body.factorRuleCode.trim()?req.body.factorRuleCode.trim():`SIMPLES_NACIONAL_FATOR_R_${year}`;
  const factorRule=await getEffectiveTaxRule(factorRuleCode,period);
  if(!factorRule)return res.status(404).json({error:"Fator R rule not found for requested period"});
  const factorInput={
@@ -109,13 +109,18 @@ router.post("/simples-nacional/fator-r",requireAuth,calculationRateLimit,async(r
      if(!Number.isFinite(fspa)||fspa<0||!Number.isFinite(rpa)||rpa<0)return res.status(400).json({error:"fspa and rpa are required and must be non-negative numbers for the opening month"});
      periodContext={mode:"opening_month",fspa,rpa};
    }else if(elapsed>0&&elapsed<12){
-     const priorMonths=req.body?.priorMonths;
-     if(!Array.isArray(priorMonths)||priorMonths.length!==elapsed)return res.status(400).json({error:`priorMonths must contain exactly ${elapsed} completed month entries`});
-     const expectedMonths=Array.from({length:elapsed},(_,i)=>{const d=new Date(Date.UTC(year,month-1,1));d.setUTCMonth(d.getUTCMonth()-(elapsed-i));return {year:d.getUTCFullYear(),month:d.getUTCMonth()+1};});
-     const invalidPeriod=priorMonths.some((item:any,i:number)=>Number(item?.year)!==expectedMonths[i].year||Number(item?.month)!==expectedMonths[i].month);
-     if(invalidPeriod)return res.status(400).json({error:"priorMonths must identify each completed month in chronological order from the opening month through the month before the calculation period"});
-     if(priorMonths.some((item:any)=>!item||!Number.isFinite(Number(item.fs))||Number(item.fs)<0||!Number.isFinite(Number(item.revenue))||Number(item.revenue)<0))return res.status(400).json({error:"priorMonths entries must contain non-negative numeric fs and revenue"});
-     periodContext={mode:"startup",priorMonths:priorMonths.map((item:any)=>({year:Number(item.year),month:Number(item.month),fs:Number(item.fs),revenue:Number(item.revenue)}))};
+     const fixedStartupMonths=Number((factorRule.parameters as any)?.startup_fixed_months||0);
+     if(fixedStartupMonths>=2 && elapsed<fixedStartupMonths){
+       periodContext={mode:"startup",priorMonths:[]};
+     }else{
+       const priorMonths=req.body?.priorMonths;
+       if(!Array.isArray(priorMonths)||priorMonths.length!==elapsed)return res.status(400).json({error:`priorMonths must contain exactly ${elapsed} completed month entries`});
+       const expectedMonths=Array.from({length:elapsed},(_,i)=>{const d=new Date(Date.UTC(year,month-1,1));d.setUTCMonth(d.getUTCMonth()-(elapsed-i));return {year:d.getUTCFullYear(),month:d.getUTCMonth()+1};});
+       const invalidPeriod=priorMonths.some((item:any,i:number)=>Number(item?.year)!==expectedMonths[i].year||Number(item?.month)!==expectedMonths[i].month);
+       if(invalidPeriod)return res.status(400).json({error:"priorMonths must identify each completed month in chronological order from the opening month through the month before the calculation period"});
+       if(priorMonths.some((item:any)=>!item||!Number.isFinite(Number(item.fs))||Number(item.fs)<0||!Number.isFinite(Number(item.revenue))||Number(item.revenue)<0))return res.status(400).json({error:"priorMonths entries must contain non-negative numeric fs and revenue"});
+       periodContext={mode:"startup",priorMonths:priorMonths.map((item:any)=>({year:Number(item.year),month:Number(item.month),fs:Number(item.fs),revenue:Number(item.revenue)}))};
+     }
    }else if(elapsed<0){
      return res.status(400).json({error:"activityStartDate cannot be after calculation period"});
    }
@@ -125,7 +130,7 @@ router.post("/simples-nacional/fator-r",requireAuth,calculationRateLimit,async(r
  let activityClassification:any=null;
  let activityClassificationRule:any=null;
  if(activityCnae){
-   activityClassificationRule=await getEffectiveTaxRule("SIMPLES_NACIONAL_FATOR_R_ACTIVITY_CLASSIFICATION_2026",period);
+   activityClassificationRule=await getEffectiveTaxRule(`SIMPLES_NACIONAL_FATOR_R_ACTIVITY_CLASSIFICATION_${year}`,period);
    if(!activityClassificationRule)return res.status(404).json({error:"Fator R activity classification rule not found for requested period"});
    activityClassification=classifyFactorRActivity({type:"CNAE",value:activityCnae},activityClassificationRule.parameters as any);
    if(activityClassification.status==="unknown"){
@@ -143,7 +148,7 @@ router.post("/simples-nacional/fator-r",requireAuth,calculationRateLimit,async(r
      });
    }
  }
- const annexCode=factor.effectiveAnnex==="III"?"SIMPLES_NACIONAL_ANEXO_III_2026":"SIMPLES_NACIONAL_ANEXO_V_2026";
+ const annexCode=`SIMPLES_NACIONAL_ANEXO_${factor.effectiveAnnex}_${year}`;
  const annexRule=await getEffectiveTaxRule(annexCode,period);
  if(!annexRule)return res.status(404).json({error:"effective Simples Nacional annex rule not found for requested period"});
  const monthlyRevenue=Number(req.body?.monthlyRevenue);
