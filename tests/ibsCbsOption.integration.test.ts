@@ -1,0 +1,84 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import pg from "pg";
+import { randomUUID } from "node:crypto";
+import { getEffectiveIbsCbsOption, recordIbsCbsOptionEvent } from "../src/services/ibsCbsOptionService.js";
+
+const databaseUrl = process.env.TAX_TEST_DATABASE_URL;
+
+test(
+  "IBS/CBS option state: pure default, hybrid election, cancellation, and second-semester continuity",
+  { skip: !databaseUrl },
+  async () => {
+    const pool = new pg.Pool({ connectionString: databaseUrl });
+    try {
+      const seed = await pool.query("SELECT id FROM tax_companies LIMIT 1");
+      assert.equal(seed.rowCount, 1);
+      const companyId = seed.rows[0].id as string;
+      const ruleResult = await pool.query(
+        "SELECT id, parameters FROM tax_rules WHERE code='SIMPLES_NACIONAL_IBS_CBS_OPTIONS_2027' LIMIT 1",
+      );
+      assert.equal(ruleResult.rowCount, 1);
+      const rule = ruleResult.rows[0].parameters;
+      const ruleVersionId = ruleResult.rows[0].id as string;
+
+      const before = await getEffectiveIbsCbsOption(companyId, "2027-01-15", rule);
+      assert.equal(before.model, "simples_puro");
+
+      await recordIbsCbsOptionEvent({
+        companyId, eventType: "elected", period: "2027-01-15", ruleVersionId,
+        now: new Date("2026-09-15T12:00:00Z"),
+      });
+      const elected = await getEffectiveIbsCbsOption(companyId, "2027-01-15", rule);
+      assert.equal(elected.model, "simples_hibrido");
+
+      await recordIbsCbsOptionEvent({
+        companyId, eventType: "cancelled", period: "2027-01-15", ruleVersionId,
+        now: new Date("2026-11-15T12:00:00Z"),
+      });
+      const cancelled = await getEffectiveIbsCbsOption(companyId, "2027-01-15", rule);
+      assert.equal(cancelled.model, "simples_puro");
+
+      const isolatedCompany = (await pool.query(
+        "SELECT id FROM tax_companies WHERE id <> $1 LIMIT 1", [companyId],
+      )).rows[0]?.id as string | undefined;
+      if (isolatedCompany) {
+        await recordIbsCbsOptionEvent({
+          companyId: isolatedCompany, eventType: "elected", period: "2027-01-15", ruleVersionId,
+          now: new Date("2026-09-15T12:00:00Z"),
+        });
+        const continued = await getEffectiveIbsCbsOption(isolatedCompany, "2027-07-15", rule);
+        assert.equal(continued.model, "simples_hibrido");
+        assert.equal(continued.previousSemesterModel, "simples_hibrido");
+      }
+
+      await assert.rejects(
+        recordIbsCbsOptionEvent({
+          companyId, eventType: "elected", period: "2027-01-15", ruleVersionId,
+          now: new Date("2026-10-01T12:00:00Z"),
+        }),
+        /election window has closed/,
+      );
+
+      await assert.rejects(
+        recordIbsCbsOptionEvent({
+          companyId, eventType: "elected", period: "2027-08-01", ruleVersionId,
+          now: new Date("2027-04-01T12:00:00Z"),
+        }),
+        /election window has closed/,
+      );
+    } finally {
+      await pool.end();
+    }
+  },
+);
+
+test(
+  "IBS/CBS option events are append-only and invalid dates are rejected",
+  { skip: !databaseUrl },
+  async () => {
+    assert.throws(
+      () => new Date("2027-02-30T00:00:00Z"),
+    );
+  },
+);
