@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { randomUUID } from "node:crypto";
 import { prepareTaxProfile, simulateConsumptionTransition, calculateMeiLoad, calculateSimplesNationalAnexoI, calculateSimplesNationalAnexoII, calculateSimplesNationalByAnnex, calculateFatorR, resolveSimplesNationalMonthlyRevenue, resolveSimplesNationalIbsCbsOption } from "../services/taxService.js";
+import { getEffectiveIbsCbsOption, recordIbsCbsOptionEvent } from "../services/ibsCbsOptionService.js";
 import { classifyFactorRActivity } from "../services/taxActivityClassificationService.js";
 import { initDb } from "../core/db.js";
 import { requireAuth } from "../middleware/auth.js";
@@ -73,20 +74,25 @@ router.post("/simples-nacional/anexo-i",requireAuth,calculationRateLimit,async(r
  const audit=await recordTaxCalculation(companyId,(req as any).userId,"simples_nacional_anexo_i",input,enriched,rule.id,parseIdempotencyKey(req));
  if(!audit)return res.status(403).json({error:"company not found or not owned by user"});
  res.json(enriched);
-}catch(e){if(e instanceof Error && (e as Error & {code?:string}).code==="IDEMPOTENCY_CONFLICT")return res.status(409).json({error:e.message});if(e instanceof Error && (e as Error & {code?:string}).code==="54000")return res.status(429).json({error:e.message});res.status(400).json({error:e instanceof Error?e.message:"invalid Simples Nacional data"});}});
-
-router.post("/simples-nacional/ibs-cbs-options",requireAuth,calculationRateLimit,async(req,res)=>{try{
+}catch(e){if(e instanceof Error && (e as Error & {code?:string}).code==="IDEMPOTENCY_CONFLICT")return res.status(409).json({error:e.message});if(e instanceof Error && (e as Error & {code?:string}).code==="54000")return res.status(429).json({error:e.mesrouter.post("/simples-nacional/ibs-cbs-options",requireAuth,calculationRateLimit,async(req,res)=>{try{
  const period=typeof req.body?.period==="string"?req.body.period.trim():"";
  const year=Number(period.slice(0,4));
- if(year!==2027)return res.status(400).json({error:"period must be in 2027"});
- const rule=await getEffectiveTaxRule("SIMPLES_NACIONAL_IBS_CBS_OPTIONS_2027",new Date(period+"T00:00:00Z"));
- if(!rule)return res.status(404).json({error:"IBS/CBS option rule not found for requested period"});
- const optionModel=req.body?.optionModel==="simples_hibrido"?"simples_hibrido":req.body?.optionModel==="simples_puro"?"simples_puro":undefined;
- const output=resolveSimplesNationalIbsCbsOption({period,optionModel,rule:rule.parameters as any});
+ if(year!==2027||!/^(2027)-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$/.test(period))return res.status(400).json({error:"period must be a valid date in 2027"});
  const companyId=typeof req.body?.companyId==="string"&&req.body.companyId.trim()?req.body.companyId.trim():null;
  if(!companyId)return res.status(400).json({error:"companyId is required for audited calculations"});
- const input={period,optionModel:optionModel??"simples_puro"};
- const enriched={...output,ruleVersion:{id:rule.id,code:rule.rule_code,version:rule.version,effectiveFrom:rule.effective_from,effectiveTo:rule.effective_to,sourceUrl:rule.source_url,sourceReference:rule.source_reference,parameters:rule.parameters}};
+ const rule=await getEffectiveTaxRule("SIMPLES_NACIONAL_IBS_CBS_OPTIONS_2027",new Date(period+"T00:00:00Z"));
+ if(!rule)return res.status(404).json({error:"IBS/CBS option rule not found for requested period"});
+ const requestedModel=req.body?.optionModel==="simples_hibrido"?"simples_hibrido":req.body?.optionModel==="simples_puro"?"simples_puro":undefined;
+ const eventType=req.body?.optionAction==="cancel"?"cancelled":requestedModel==="simples_hibrido"?"elected":undefined;
+ if(req.body?.optionAction && !eventType)return res.status(400).json({error:"optionAction must be elected or cancel"});
+ const decision=await getEffectiveIbsCbsOption(companyId,period,rule);
+ if(eventType){
+   await recordIbsCbsOptionEvent({companyId,eventType,period,ruleVersionId:rule.id});
+ }
+ const effective=await getEffectiveIbsCbsOption(companyId,period,rule);
+ const output=resolveSimplesNationalIbsCbsOption({period,optionModel:effective.model,previousSemesterModel:effective.previousSemesterModel,rule:rule.parameters as any});
+ const input={period,optionAction:eventType??"status",optionModel:effective.model,previousSemesterModel:effective.previousSemesterModel};
+ const enriched={...output,decisionSource:eventType==="elected"?"explicit_event":eventType==="cancelled"?"explicit_cancellation":output.decisionSource,optionEvent:effective.event,ruleVersion:{id:rule.id,code:rule.rule_code,version:rule.version,effectiveFrom:rule.effective_from,effectiveTo:rule.effective_to,sourceUrl:rule.source_url,sourceReference:rule.source_reference,parameters:rule.parameters}};
  const audit=await recordTaxCalculation(companyId,(req as any).userId,"simples_nacional_ibs_cbs_options",input,enriched,rule.id,parseIdempotencyKey(req));
  if(!audit)return res.status(403).json({error:"company not found or not owned by user"});
  res.json(enriched);
