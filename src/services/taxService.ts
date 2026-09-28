@@ -176,6 +176,7 @@ export type SimplesNationalIbsCbsOptionRule = {
 export function resolveSimplesNationalIbsCbsOption(input: {
   period: string;
   optionModel?: "simples_puro" | "simples_hibrido";
+  previousSemesterModel?: "simples_puro" | "simples_hibrido";
   rule: SimplesNationalIbsCbsOptionRule;
 }) {
   const period = new Date(input.period + "T00:00:00Z");
@@ -187,18 +188,36 @@ export function resolveSimplesNationalIbsCbsOption(input: {
   if (!first && !second) throw new Error("period is outside the 2027 IBS/CBS option framework");
   const semester = first ? "first" : "second";
   const window = first ? rule.first_semester.option_window : rule.second_semester.option_window;
-  const selectedModel = input.optionModel ?? "simples_puro";
-  if (!rule.models.includes(selectedModel)) throw new Error("unsupported IBS/CBS option model");
+
+  if (input.optionModel && !rule.models.includes(input.optionModel)) {
+    throw new Error("unsupported IBS/CBS option model");
+  }
+  if (input.previousSemesterModel && !rule.models.includes(input.previousSemesterModel)) {
+    throw new Error("unsupported previous semester option model");
+  }
+
+  // For the first semester, no explicit choice means the default Simples Nacional model.
+  // For the second semester, a prior hybrid election continues unless explicitly changed;
+  // this preserves the normative continuity rule instead of silently resetting to pure.
+  const selectedModel = input.optionModel
+    ?? (second ? input.previousSemesterModel : undefined)
+    ?? "simples_puro";
+  const decisionSource =
+    input.optionModel ? "explicit"
+    : second && input.previousSemesterModel ? "continued_previous_option"
+    : "default_no_regular_option";
+
   return {
     year: 2027,
     semester,
     optionModel: selectedModel,
+    decisionSource,
     effectStart: first ? rule.first_semester.start : rule.second_semester.start,
     effectEnd: first ? rule.first_semester.end : rule.second_semester.end,
     optionWindow: window,
     cancellationDeadline: first ? rule.first_semester.cancellation_deadline : rule.second_semester.cancellation_deadline,
     regularIbsCbsRatesAvailable: false,
-    note: "Option framework only; regular IBS/CBS rates must be resolved from a separate applicable normative rule."
+    note: "Option framework only; regular IBS/CBS rates must be resolved from a separate applicable normative rule. A prior hybrid election continues into subsequent periods unless explicitly renounced or replaced within the applicable option window."
   };
 }
 
