@@ -182,7 +182,19 @@ export type FatorRRuleParameters = {
   };
 };
 
-export function calculateFatorR(input: FatorRInput, rule: FatorRRuleParameters) {
+export type FatorRPeriodContext =
+  | { mode: "established" }
+  | {
+      mode: "opening_month";
+      fspa: number;
+      rpa: number;
+    }
+  | {
+      mode: "startup";
+      priorMonths: Array<{ fs: number; revenue: number }>;
+    };
+
+export function calculateFatorR(input: FatorRInput, rule: FatorRRuleParameters, periodContext: FatorRPeriodContext = { mode: "established" }) {
   const revenue12m = finiteNonNegative(input.revenue12m, "revenue12m");
 
   const employee = finiteNonNegative(input.employeeAndAvulsoRemuneration12m, "employeeAndAvulsoRemuneration12m");
@@ -198,19 +210,36 @@ export function calculateFatorR(input: FatorRInput, rule: FatorRRuleParameters) 
   }
 
   const fs12 = employee + individual + thirteenth + cpp + fgts;
+  let factorNumerator = fs12;
+  let factorDenominator = revenue12m;
+  let factorBasis: "FS12_RBT12" | "FSPA_RPA" | "startup_prior_months" = "FS12_RBT12";
+
+  if (periodContext.mode === "opening_month") {
+    const fspa = finiteNonNegative(periodContext.fspa, "fspa");
+    const rpa = finiteNonNegative(periodContext.rpa, "rpa");
+    factorNumerator = fspa;
+    factorDenominator = rpa;
+    factorBasis = "FSPA_RPA";
+  } else if (periodContext.mode === "startup") {
+    if (!Array.isArray(periodContext.priorMonths)) throw new Error("priorMonths must be an array");
+    factorNumerator = periodContext.priorMonths.reduce((sum, item) => sum + finiteNonNegative(item.fs, "prior month fs"), 0);
+    factorDenominator = periodContext.priorMonths.reduce((sum, item) => sum + finiteNonNegative(item.revenue, "prior month revenue"), 0);
+    factorBasis = "startup_prior_months";
+  }
+
   let factorR: number;
   let thresholdComparison: "greater_or_equal" | "below";
-  if (fs12 === 0 && revenue12m === 0) {
+  if (factorNumerator === 0 && factorDenominator === 0) {
     factorR = 0.01;
     thresholdComparison = "below";
-  } else if (fs12 > 0 && revenue12m === 0) {
+  } else if (factorNumerator > 0 && factorDenominator === 0) {
     factorR = 0.28;
     thresholdComparison = "greater_or_equal";
-  } else if (fs12 === 0 && revenue12m > 0) {
+  } else if (factorNumerator === 0 && factorDenominator > 0) {
     factorR = 0.01;
     thresholdComparison = "below";
   } else {
-    factorR = fs12 / revenue12m;
+    factorR = factorNumerator / factorDenominator;
     thresholdComparison = factorR >= threshold ? "greater_or_equal" : "below";
   }
   const effectiveAnnex = thresholdComparison === "greater_or_equal"
@@ -220,6 +249,9 @@ export function calculateFatorR(input: FatorRInput, rule: FatorRRuleParameters) 
   return {
     revenue12m,
     fs12,
+    factorBasis,
+    factorNumerator,
+    factorDenominator,
     factorR: Math.round(factorR * 100000000) / 100000000,
     threshold,
     thresholdComparison,
