@@ -235,16 +235,3 @@ export function calculateFatorR(input: FatorRInput, rule: FatorRRuleParameters) 
     note: "Fator R calculado pela razão FS12/RBT12 com os componentes informados. A atividade deve estar entre as hipóteses legais sujeitas ao Fator R para a resolução III/V ser aplicável."
   };
 }
-
-export function calculateSimplesNationalByAnnex(input: {
-  revenue12m: number;
-  monthlyRevenue: number;
-}, rule: SimplesNationalRuleParameters) {
-  return calculateSimplesNationalAnexoI(input, rule);
-}
-
-export const calculateSimplesNationalAnexoII = (input: {
-  revenue12m: number;
-  monthlyRevenue: number;
-}, rule: SimplesNationalRuleParameters) =>
-  calculateSimplesNationalAnexoI(input, rule);
