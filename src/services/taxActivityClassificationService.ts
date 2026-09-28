@@ -28,7 +28,7 @@ type ClassificationRule = {
 };
 
 function normalizeCnae(value: unknown): string {
-  return String(value ?? "").replace(/\\D/g, "");
+  return String(value ?? "").replace(/\D/g, "");
 }
 
 export function classifyFactorRActivity(
