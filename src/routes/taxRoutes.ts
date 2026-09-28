@@ -47,7 +47,7 @@ router.post("/simulate/consumption-transition",requireAuth,calculationRateLimit,
 router.post("/simples-nacional/anexo-ii",requireAuth,calculationRateLimit,async(req,res)=>{try{
  const revenue12m=Number(req.body?.revenue12m),monthlyRevenue=Number(req.body?.monthlyRevenue),year=Number(req.body?.year??new Date().getUTCFullYear());
  if(!Number.isInteger(year))return res.status(400).json({error:"year must be an integer"});
- const ruleCode=typeof req.body?.ruleCode==="string"&&req.body.ruleCode.trim()?req.body.ruleCode.trim():"SIMPLES_NACIONAL_ANEXO_II_2026";
+ const ruleCode=typeof req.body?.ruleCode==="string"&&req.body.ruleCode.trim()?req.body.ruleCode.trim():`SIMPLES_NACIONAL_ANEXO_II_${year}`;
  const rule=await getEffectiveTaxRule(ruleCode,new Date(Date.UTC(year,0,1)));
  if(!rule)return res.status(404).json({error:"tax rule not found for requested year"});
  const companyId=typeof req.body?.companyId==="string"&&req.body.companyId.trim()?req.body.companyId.trim():null;
@@ -62,7 +62,7 @@ router.post("/simples-nacional/anexo-ii",requireAuth,calculationRateLimit,async(
 router.post("/simples-nacional/anexo-i",requireAuth,calculationRateLimit,async(req,res)=>{try{
  const revenue12m=Number(req.body?.revenue12m),monthlyRevenue=Number(req.body?.monthlyRevenue),year=Number(req.body?.year??new Date().getUTCFullYear());
  if(!Number.isInteger(year))return res.status(400).json({error:"year must be an integer"});
- const ruleCode=typeof req.body?.ruleCode==="string"&&req.body.ruleCode.trim()?req.body.ruleCode.trim():"SIMPLES_NACIONAL_ANEXO_I_2026";
+ const ruleCode=typeof req.body?.ruleCode==="string"&&req.body.ruleCode.trim()?req.body.ruleCode.trim():`SIMPLES_NACIONAL_ANEXO_I_${year}`;
  const rule=await getEffectiveTaxRule(ruleCode,new Date(Date.UTC(year,0,1)));
  if(!rule)return res.status(404).json({error:"tax rule not found for requested year"});
  const companyId=typeof req.body?.companyId==="string"&&req.body.companyId.trim()?req.body.companyId.trim():null;
