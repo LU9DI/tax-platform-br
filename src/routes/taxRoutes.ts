@@ -127,6 +127,7 @@ router.post("/simples-nacional/fator-r",requireAuth,calculationRateLimit,async(r
    regime:"simples_nacional",
    calculationType:"fator_r",
    period:{year,month},
+   activityStartDate:activityStartDate?activityStartDate.toISOString().slice(0,10):null,
    factorR:{...factor},
    effectiveAnnex:factor.effectiveAnnex,
    activityClassification: activityClassification ? { ...activityClassification, ruleVersion:{id:activityClassificationRule.id,code:activityClassificationRule.rule_code,version:activityClassificationRule.version,effectiveFrom:activityClassificationRule.effective_from,effectiveTo:activityClassificationRule.effective_to,sourceUrl:activityClassificationRule.source_url,sourceReference:activityClassificationRule.source_reference,parameters:activityClassificationRule.parameters} } : null,
