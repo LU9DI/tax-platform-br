@@ -89,7 +89,7 @@ router.post("/simples-nacional/ibs-cbs-options",requireAuth,calculationRateLimit
  const optionModel=req.body?.optionModel==="simples_hibrido"?"simples_hibrido":req.body?.optionModel==="simples_puro"?"simples_puro":undefined;
  const optionAction=req.body?.optionAction;
  if(optionAction!==undefined&&optionAction!=="elected"&&optionAction!=="cancel")return res.status(400).json({error:"optionAction must be elected or cancel"});
- if(optionAction==="elected"||optionModel==="simples_hibrido")await recordIbsCbsOptionEvent({companyId,eventType:"elected",period,ruleVersionId:rule.id});
+ if(optionAction==="elected")await recordIbsCbsOptionEvent({companyId,eventType:"elected",period,ruleVersionId:rule.id});
  if(optionAction==="cancel")await recordIbsCbsOptionEvent({companyId,eventType:"cancelled",period,ruleVersionId:rule.id});
  const effective=await getEffectiveIbsCbsOption(companyId,period,rule.parameters as any);
  const output=resolveSimplesNationalIbsCbsOption({period,optionModel:effective.model,previousSemesterModel:effective.previousSemesterModel,rule:rule.parameters as any});
