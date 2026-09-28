@@ -27,6 +27,8 @@ router.post("/mei/load",requireAuth,calculationRateLimit,async(req,res)=>{try{
  const output=calculateMeiLoad({...req.body,year},rule.parameters as any);
  const companyId=typeof req.body?.companyId==="string"&&req.body.companyId.trim()?req.body.companyId.trim():null;
  if(!companyId)return res.status(400).json({error:"companyId is required for audited calculations"});
+ const ownership=await initDb().query("SELECT id FROM tax_companies WHERE id=$1 AND user_id=$2",[companyId,(req as any).userId]);
+ if(!ownership.rowCount)return res.status(403).json({error:"company not found or not owned by user"});
  const enriched={...output,ruleVersion:{id:rule.id,code:rule.rule_code,version:rule.version,effectiveFrom:rule.effective_from,effectiveTo:rule.effective_to,sourceUrl:rule.source_url,sourceReference:rule.source_reference,parameters:rule.parameters}};
  if(companyId){const audit=await recordTaxCalculation(companyId,(req as any).userId,"mei_load",req.body,enriched,rule.id,parseIdempotencyKey(req));if(!audit)return res.status(403).json({error:"company not found or not owned by user"});}
  res.json(enriched);
