@@ -91,6 +91,32 @@ export async function recordTaxCalculation(
     throw error;
   }
 
+  // Optional second normative snapshot for Fator R activity classification.
+  // It remains inside the same audit path and is verified against the exact
+  // immutable tax_rules row referenced by the embedded snapshot.
+  const outputRecord = output && typeof output === "object" ? output as Record<string, unknown> : null;
+  const classification = outputRecord?.activityClassification;
+  if (classification && typeof classification === "object") {
+    const classificationRecord = classification as Record<string, unknown>;
+    const snapshot = classificationRecord.ruleVersion;
+    if (!snapshot || typeof snapshot !== "object" || typeof (snapshot as Record<string, unknown>).id !== "string") {
+      const error = new Error("activity classification evidence is incomplete");
+      (error as Error & { code?: string }).code = "RULE_EVIDENCE_MISMATCH";
+      throw error;
+    }
+    const classificationRule = await db.query(
+      `SELECT id, code AS rule_code, version, parameters
+       FROM tax_rules
+       WHERE id=$1`,
+      [(snapshot as Record<string, unknown>).id],
+    );
+    if (!classificationRule.rowCount || !ruleEvidenceMatches({ ruleVersion: snapshot }, classificationRule.rows[0])) {
+      const error = new Error("activity classification evidence does not match its referenced tax rule version");
+      (error as Error & { code?: string }).code = "RULE_EVIDENCE_MISMATCH";
+      throw error;
+    }
+  }
+
   const fingerprint = createHash("sha256")
     .update(stableJson({ type, input, ruleVersionId }))
     .digest("hex");
