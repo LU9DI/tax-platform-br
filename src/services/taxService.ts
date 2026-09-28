@@ -166,6 +166,42 @@ export const calculateSimplesNationalAnexoII = (input: {
   calculateSimplesNationalBracketed(input, rule);
 
 
+export type SimplesNationalIbsCbsOptionRule = {
+  models: ["simples_puro","simples_hibrido"];
+  first_semester: { start: string; end: string; option_window: { start: string; end: string }; cancellation_deadline: string };
+  second_semester: { start: string; end: string; option_window: { start: string; end: string }; cancellation_deadline: string };
+  regular_ibs_cbs_rates: null;
+};
+
+export function resolveSimplesNationalIbsCbsOption(input: {
+  period: string;
+  optionModel?: "simples_puro" | "simples_hibrido";
+  rule: SimplesNationalIbsCbsOptionRule;
+}) {
+  const period = new Date(input.period + "T00:00:00Z");
+  if (Number.isNaN(period.getTime())) throw new Error("invalid period");
+  const rule = input.rule;
+  if (!rule || rule.regular_ibs_cbs_rates !== null) throw new Error("invalid IBS/CBS option rule");
+  const first = period >= new Date(rule.first_semester.start + "T00:00:00Z") && period <= new Date(rule.first_semester.end + "T00:00:00Z");
+  const second = period >= new Date(rule.second_semester.start + "T00:00:00Z") && period <= new Date(rule.second_semester.end + "T00:00:00Z");
+  if (!first && !second) throw new Error("period is outside the 2027 IBS/CBS option framework");
+  const semester = first ? "first" : "second";
+  const window = first ? rule.first_semester.option_window : rule.second_semester.option_window;
+  const selectedModel = input.optionModel ?? "simples_puro";
+  if (!rule.models.includes(selectedModel)) throw new Error("unsupported IBS/CBS option model");
+  return {
+    year: 2027,
+    semester,
+    optionModel: selectedModel,
+    effectStart: first ? rule.first_semester.start : rule.second_semester.start,
+    effectEnd: first ? rule.first_semester.end : rule.second_semester.end,
+    optionWindow: window,
+    cancellationDeadline: first ? rule.first_semester.cancellation_deadline : rule.second_semester.cancellation_deadline,
+    regularIbsCbsRatesAvailable: false,
+    note: "Option framework only; regular IBS/CBS rates must be resolved from a separate applicable normative rule."
+  };
+}
+
 export type FatorRInput = {
   revenue12m: number;
   employeeAndAvulsoRemuneration12m: number;
