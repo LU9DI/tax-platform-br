@@ -1,10 +1,10 @@
+import { randomUUID } from "node:crypto";
 import { initDb } from "../core/db.js";
-import type { PoolClient } from "pg";
 import type { SimplesNationalIbsCbsOptionRule } from "./taxService.js";
 
 type EventType = "elected" | "cancelled";
 
-function dateOnly(value:string){const d=new Date(value+"T00:00:00Z");if(Number.isNaN(d.getTime()))throw new Error("invalid period");return d;}
+function dateOnly(value:string){if(!/^\\d{4}-\\d{2}-\\d{2}$/.test(value))throw new Error("invalid date");const d=new Date(value+"T00:00:00Z");if(Number.isNaN(d.getTime())||d.toISOString().slice(0,10)!==value)throw new Error("invalid date");return d;}
 
 function semesterDates(rule:SimplesNationalIbsCbsOptionRule,period:string){
  const d=dateOnly(period);
@@ -32,18 +32,18 @@ export async function getEffectiveIbsCbsOption(companyId:string,period:string,ru
  return {model,previousSemesterModel,event:currentEvent};
 }
 
-export async function recordIbsCbsOptionEvent(input:{companyId:string;eventType:EventType;period:string;ruleVersionId:string}){
+export async function recordIbsCbsOptionEvent(input:{companyId:string;eventType:EventType;period:string;ruleVersionId:string;now?:Date}){
  const db=initDb();
  const ruleResult=await db.query("SELECT parameters FROM tax_rules WHERE id=$1 AND code='SIMPLES_NACIONAL_IBS_CBS_OPTIONS_2027'",[input.ruleVersionId]);
  if(!ruleResult.rowCount)throw new Error("IBS/CBS option rule not found");
  const rule=ruleResult.rows[0].parameters as SimplesNationalIbsCbsOptionRule;
  const {effectiveFrom,effectiveTo,window,cancellationDeadline}=semesterDates(rule,input.period);
- const now=new Date();
+ const now=input.now??new Date();
  const windowStart=dateOnly(window.start),windowEnd=dateOnly(window.end),deadline=dateOnly(cancellationDeadline);
  if(now<windowStart||now>deadline)throw new Error("IBS/CBS option event is outside the applicable option/cancellation window");
  if(input.eventType==="cancelled" && now>deadline)throw new Error("IBS/CBS cancellation deadline has passed");
  if(input.eventType==="elected" && now>windowEnd)throw new Error("IBS/CBS election window has closed");
- const id=crypto.randomUUID();
+ const id=randomUUID();
  await db.query("INSERT INTO tax_company_ibs_cbs_option_events (id,company_id,event_type,model,effective_from,effective_to,option_window_start,option_window_end,cancellation_deadline,rule_version_id) VALUES ($1,$2,$3,'simples_hibrido',$4,$5,$6,$7,$8,$9) ON CONFLICT (company_id,effective_from,effective_to,event_type) DO NOTHING",[id,input.companyId,input.eventType,effectiveFrom,effectiveTo,window.start,window.end,cancellationDeadline,input.ruleVersionId]);
  return id;
 }
