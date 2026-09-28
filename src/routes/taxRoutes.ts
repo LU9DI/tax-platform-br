@@ -82,6 +82,8 @@ router.post("/simples-nacional/ibs-cbs-options",requireAuth,calculationRateLimit
  if(year!==2027)return res.status(400).json({error:"period must be in 2027"});
  const rule=await getEffectiveTaxRule("SIMPLES_NACIONAL_IBS_CBS_OPTIONS_2027",new Date(period+"T00:00:00Z"));
  if(!rule)return res.status(404).json({error:"IBS/CBS option rule not found for requested period"});
+ const companyId=typeof req.body?.companyId==="string"&&req.body.companyId.trim()?req.body.companyId.trim():null;
+ if(!companyId)return res.status(400).json({error:"companyId is required for audited calculations"});
  const optionModel=req.body?.optionModel==="simples_hibrido"?"simples_hibrido":req.body?.optionModel==="simples_puro"?"simples_puro":undefined;
  const optionAction=req.body?.optionAction;
  if(optionAction!==undefined&&optionAction!=="elected"&&optionAction!=="cancel")return res.status(400).json({error:"optionAction must be elected or cancel"});
@@ -89,8 +91,6 @@ router.post("/simples-nacional/ibs-cbs-options",requireAuth,calculationRateLimit
  if(optionAction==="cancel")await recordIbsCbsOptionEvent({companyId,eventType:"cancelled",period,ruleVersionId:rule.id});
  const effective=await getEffectiveIbsCbsOption(companyId,period,rule.parameters as any);
  const output=resolveSimplesNationalIbsCbsOption({period,optionModel:effective.model,previousSemesterModel:effective.previousSemesterModel,rule:rule.parameters as any});
- const companyId=typeof req.body?.companyId==="string"&&req.body.companyId.trim()?req.body.companyId.trim():null;
- if(!companyId)return res.status(400).json({error:"companyId is required for audited calculations"});
  const input={period,optionAction:optionAction??"status",optionModel:effective.model,previousSemesterModel:effective.previousSemesterModel};
  const enriched={...output,ruleVersion:{id:rule.id,code:rule.rule_code,version:rule.version,effectiveFrom:rule.effective_from,effectiveTo:rule.effective_to,sourceUrl:rule.source_url,sourceReference:rule.source_reference,parameters:rule.parameters}};
  const audit=await recordTaxCalculation(companyId,(req as any).userId,"simples_nacional_ibs_cbs_options",input,enriched,rule.id,parseIdempotencyKey(req));
