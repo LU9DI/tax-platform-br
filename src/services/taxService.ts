@@ -91,7 +91,7 @@ export type SimplesNationalRuleParameters = {
   brackets: SimplesNationalBracket[];
 };
 
-export type RevenueRecognitionRuleParameters = { monthly_basis: "gross_revenue_accrued"; cash_regime_for_monthly_calculation: false; goods_services_recognition: "operation_billing"; fiscal_document_as_general_reference: boolean; };
+export type RevenueRecognitionRuleParameters = { monthly_basis: "gross_revenue_accrued"; cash_regime_for_monthly_calculation: boolean; goods_services_recognition: "operation_billing"; fiscal_document_as_general_reference: boolean; };
 
 export function resolveSimplesNationalMonthlyRevenue(input: { year: number; grossRevenueAccrued?: number }, rule: RevenueRecognitionRuleParameters) {
   if (!Number.isInteger(input.year)) throw new Error("year must be an integer");
@@ -167,7 +167,7 @@ export const calculateSimplesNationalAnexoII = (input: {
 
 
 export type SimplesNationalIbsCbsOptionRule = {
-  models: ["simples_puro","simples_hibrido"];
+  models: readonly ["simples_puro","simples_hibrido"];
   first_semester: { start: string; end: string; option_window: { start: string; end: string }; cancellation_deadline: string };
   second_semester: { start: string; end: string; option_window: { start: string; end: string }; cancellation_deadline: string };
   regular_ibs_cbs_rates: null;
