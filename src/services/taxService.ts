@@ -135,6 +135,79 @@ export function calculateSimplesNationalAnexoI(input: {
   };
 }
 
+
+export type FatorRInput = {
+  revenue12m: number;
+  employeeAndAvulsoRemuneration12m: number;
+  individualContributorRemuneration12m: number;
+  thirteenthSalary12m: number;
+  employerSocialSecurityContribution12m: number;
+  fgts12m: number;
+};
+
+export type FatorRRuleParameters = {
+  threshold: number;
+  period_months: number;
+  ratio: "FS12/RBT12";
+  fs12: {
+    includes: string[];
+    excludes_examples: string[];
+  };
+  rbt12: {
+    basis: string;
+  };
+  selection: {
+    greater_or_equal_threshold: "III";
+    below_threshold: "V";
+  };
+};
+
+export function calculateFatorR(input: FatorRInput, rule: FatorRRuleParameters) {
+  const revenue12m = finiteNonNegative(input.revenue12m, "revenue12m");
+  if (revenue12m <= 0) throw new Error("revenue12m must be greater than zero for Fator R");
+
+  const employee = finiteNonNegative(input.employeeAndAvulsoRemuneration12m, "employeeAndAvulsoRemuneration12m");
+  const individual = finiteNonNegative(input.individualContributorRemuneration12m, "individualContributorRemuneration12m");
+  const thirteenth = finiteNonNegative(input.thirteenthSalary12m, "thirteenthSalary12m");
+  const cpp = finiteNonNegative(input.employerSocialSecurityContribution12m, "employerSocialSecurityContribution12m");
+  const fgts = finiteNonNegative(input.fgts12m, "fgts12m");
+
+  const threshold = Number(rule?.threshold);
+  const periodMonths = Number(rule?.period_months);
+  if (!Number.isFinite(threshold) || threshold < 0 || threshold > 1 || periodMonths !== 12) {
+    throw new Error("invalid Fator R rule parameters");
+  }
+
+  const fs12 = employee + individual + thirteenth + cpp + fgts;
+  const factorR = fs12 / revenue12m;
+  const effectiveAnnex = factorR >= threshold ? rule.selection.greater_or_equal_threshold : rule.selection.below_threshold;
+
+  return {
+    revenue12m,
+    fs12,
+    factorR: Math.round(factorR * 100000000) / 100000000,
+    threshold,
+    thresholdComparison: factorR >= threshold ? "greater_or_equal" : "below",
+    effectiveAnnex,
+    inputs: {
+      employeeAndAvulsoRemuneration12m: employee,
+      individualContributorRemuneration12m: individual,
+      thirteenthSalary12m: thirteenth,
+      employerSocialSecurityContribution12m: cpp,
+      fgts12m: fgts
+    },
+    periodMonths,
+    note: "Fator R calculado pela razão FS12/RBT12 com os componentes informados. A atividade deve estar entre as hipóteses legais sujeitas ao Fator R para a resolução III/V ser aplicável."
+  };
+}
+
+export function calculateSimplesNationalByAnnex(input: {
+  revenue12m: number;
+  monthlyRevenue: number;
+}, rule: SimplesNationalRuleParameters) {
+  return calculateSimplesNationalAnexoI(input, rule);
+}
+
 export const calculateSimplesNationalAnexoII = (input: {
   revenue12m: number;
   monthlyRevenue: number;
