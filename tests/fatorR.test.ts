@@ -88,7 +88,7 @@ test("Fator R startup period uses completed months before PA",()=>{
     revenue12m:999999,employeeAndAvulsoRemuneration12m:0,individualContributorRemuneration12m:0,
     thirteenthSalary12m:0,employerSocialSecurityContribution12m:0,fgts12m:0
   },RULE,{mode:"startup",priorMonths:[
-    {fs:2000,revenue:10000},{fs:2500,revenue:10000}
+    {year:2026,month:1,fs:2000,revenue:10000},{year:2026,month:2,fs:2500,revenue:10000}
   ]});
   assert.equal(r.factorBasis,"startup_prior_months");
   assert.equal(r.factorNumerator,4500);
