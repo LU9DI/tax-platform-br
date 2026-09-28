@@ -86,8 +86,8 @@ export type SimplesNationalBracket = {
 };
 
 export type SimplesNationalRuleParameters = {
-  annex: "I" | "II";
-  activity: "commerce" | "industry";
+  annex: "I" | "II" | "III" | "V";
+  activity: "commerce" | "industry" | "services" | "services_factor_r";
   brackets: SimplesNationalBracket[];
 };
 
@@ -164,7 +164,6 @@ export type FatorRRuleParameters = {
 
 export function calculateFatorR(input: FatorRInput, rule: FatorRRuleParameters) {
   const revenue12m = finiteNonNegative(input.revenue12m, "revenue12m");
-  if (revenue12m <= 0) throw new Error("revenue12m must be greater than zero for Fator R");
 
   const employee = finiteNonNegative(input.employeeAndAvulsoRemuneration12m, "employeeAndAvulsoRemuneration12m");
   const individual = finiteNonNegative(input.individualContributorRemuneration12m, "individualContributorRemuneration12m");
@@ -179,15 +178,31 @@ export function calculateFatorR(input: FatorRInput, rule: FatorRRuleParameters) 
   }
 
   const fs12 = employee + individual + thirteenth + cpp + fgts;
-  const factorR = fs12 / revenue12m;
-  const effectiveAnnex = factorR >= threshold ? rule.selection.greater_or_equal_threshold : rule.selection.below_threshold;
+  let factorR: number;
+  let thresholdComparison: "greater_or_equal" | "below";
+  if (fs12 === 0 && revenue12m === 0) {
+    factorR = 0.01;
+    thresholdComparison = "below";
+  } else if (fs12 > 0 && revenue12m === 0) {
+    factorR = 0.28;
+    thresholdComparison = "greater_or_equal";
+  } else if (fs12 === 0 && revenue12m > 0) {
+    factorR = 0.01;
+    thresholdComparison = "below";
+  } else {
+    factorR = fs12 / revenue12m;
+    thresholdComparison = factorR >= threshold ? "greater_or_equal" : "below";
+  }
+  const effectiveAnnex = thresholdComparison === "greater_or_equal"
+    ? rule.selection.greater_or_equal_threshold
+    : rule.selection.below_threshold;
 
   return {
     revenue12m,
     fs12,
     factorR: Math.round(factorR * 100000000) / 100000000,
     threshold,
-    thresholdComparison: factorR >= threshold ? "greater_or_equal" : "below",
+    thresholdComparison,
     effectiveAnnex,
     inputs: {
       employeeAndAvulsoRemuneration12m: employee,
