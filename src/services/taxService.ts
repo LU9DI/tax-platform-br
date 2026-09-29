@@ -179,8 +179,9 @@ export function resolveSimplesNationalIbsCbsOption(input: {
   previousSemesterModel?: "simples_puro" | "simples_hibrido";
   rule: SimplesNationalIbsCbsOptionRule;
 }) {
+  if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(input.period)) throw new Error("invalid period");
   const period = new Date(input.period + "T00:00:00Z");
-  if (Number.isNaN(period.getTime())) throw new Error("invalid period");
+  if (Number.isNaN(period.getTime()) || period.toISOString().slice(0, 10) !== input.period) throw new Error("invalid period");
   const rule = input.rule;
   if (!rule || rule.regular_ibs_cbs_rates !== null) throw new Error("invalid IBS/CBS option rule");
   const first = period >= new Date(rule.first_semester.start + "T00:00:00Z") && period <= new Date(rule.first_semester.end + "T00:00:00Z");
