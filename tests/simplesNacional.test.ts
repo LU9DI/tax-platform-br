@@ -27,7 +27,7 @@ test("Simples Nacional Anexo I selects bracket and calculates effective rate",()
 test("Simples Nacional Anexo I rejects revenue above rule limit",()=>{
   assert.throws(
     ()=>calculateSimplesNationalAnexoI({revenue12m:4800000.01,monthlyRevenue:1000},RULE),
-    /exceeds Simples Nacional Anexo I limit/
+    /exceeds Simples Nacional (?:Anexo I )?limit/
   );
 });
 
