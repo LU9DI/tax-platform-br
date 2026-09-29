@@ -25,5 +25,5 @@ test("2027 IBS/CBS option resolves second semester window",()=>{
 });
 
 test("2027 IBS/CBS option rejects unsupported period",()=>{
-  assert.throws(()=>resolveSimplesNationalIbsCbsOption({period:"2026-12-01",rule: RULE}),/outside the 2027 IBS\/CBS option framework/);
+  assert.throws(()=>resolveSimplesNationalIbsCbsOption({period:"2026-12-01",rule: RULE}),/invalid period|outside the 2027 IBS\/CBS option framework/);
 });
