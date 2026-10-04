@@ -28,6 +28,12 @@ VALUES
     "renunciation_window":{"start":"2027-03-01","end":"2027-03-31"},
     "cancellation_deadline":null
   },
+  "start_of_activity":{
+    "cnpj_registration_window":{"start":"2026-10-31","end":"2026-12-31"},
+    "option_at_cnpj_registration":true,
+    "ibs_cbs_effective_window":{"start":"2027-01-01","end":"2027-06-30"},
+    "effect_basis":"cnpj_registration_for_simples_and_ibs_cbs"
+  },
   "regular_ibs_cbs_rates":null,
   "normative_update":"Resolução CGSN nº 194/2026",
   "published_at":"2026-09-28",
