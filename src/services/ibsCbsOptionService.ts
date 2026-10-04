@@ -44,15 +44,16 @@ export async function recordIbsCbsOptionEvent(input:{companyId:string;eventType:
  const cancellationWindow=semesterDates(rule,input.period).semester==="first"
    ? (rule.first_semester.cancellation_window ?? (deadline?{start:window.start,end:cancellationDeadline!}:window))
    : null;
- const cancellationStart=dateOnly(cancellationWindow.start),cancellationEnd=dateOnly(cancellationWindow.end);
+ const cancellationStart=cancellationWindow?dateOnly(cancellationWindow.start):null;
+ const cancellationEnd=cancellationWindow?dateOnly(cancellationWindow.end):null;
  if(input.eventType==="elected"){
    if(now<windowStart||now>windowEnd)throw new Error("IBS/CBS election window has closed");
  } else {
    if(!cancellationWindow)throw new Error("second-semester renunciation requires the dedicated renunciation flow");
-   if(now<cancellationStart||now>cancellationEnd)throw new Error("IBS/CBS cancellation window is closed");
+   if(!cancellationStart||!cancellationEnd||now<cancellationStart||now>cancellationEnd)throw new Error("IBS/CBS cancellation window is closed");
    if(deadline && now>deadline)throw new Error("IBS/CBS cancellation deadline has passed");
  }
  const id=randomUUID();
- await db.query("INSERT INTO tax_company_ibs_cbs_option_events (id,company_id,event_type,model,effective_from,effective_to,option_window_start,option_window_end,cancellation_window_start,cancellation_deadline,rule_version_id) VALUES ($1,$2,$3,'simples_hibrido',$4,$5,$6,$7,$8,$9,$10) ON CONFLICT (company_id,effective_from,effective_to,event_type) DO NOTHING",[id,input.companyId,input.eventType,effectiveFrom,effectiveTo,window.start,window.end,cancellationWindow.start,cancellationDeadline,input.ruleVersionId]);
+ await db.query("INSERT INTO tax_company_ibs_cbs_option_events (id,company_id,event_type,model,effective_from,effective_to,option_window_start,option_window_end,cancellation_window_start,cancellation_deadline,rule_version_id) VALUES ($1,$2,$3,'simples_hibrido',$4,$5,$6,$7,$8,$9,$10) ON CONFLICT (company_id,effective_from,effective_to,event_type) DO NOTHING",[id,input.companyId,input.eventType,effectiveFrom,effectiveTo,window.start,window.end,cancellationWindow?.start ?? null,cancellationDeadline ?? null,input.ruleVersionId]);
  return id;
 }
