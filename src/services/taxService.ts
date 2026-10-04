@@ -181,7 +181,7 @@ export type SimplesNationalIbsCbsStartOfActivityRule = {
 };
 
 function validIsoDate(value: string, name: string) {
-  if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(value)) throw new Error(`invalid ${name}`);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) throw new Error(`invalid ${name}`);
   const d = new Date(value + "T00:00:00Z");
   if (Number.isNaN(d.getTime()) || d.toISOString().slice(0, 10) !== value) throw new Error(`invalid ${name}`);
   return d;
