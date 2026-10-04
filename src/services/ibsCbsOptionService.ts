@@ -9,9 +9,9 @@ function dateOnly(value:string){if(!/^\d{4}-\d{2}-\d{2}$/.test(value))throw new 
 function semesterDates(rule:SimplesNationalIbsCbsOptionRule,period:string){
  const d=dateOnly(period);
  const firstStart=dateOnly(rule.first_semester.start), firstEnd=dateOnly(rule.first_semester.end);
- const secondStart=dateOnly(rule.second_semester.start), secondEnd=dateOnly(rule.second_semester.end);
+ const secondStart=rule.second_semester ? dateOnly(rule.second_semester.start) : null, secondEnd=rule.second_semester ? dateOnly(rule.second_semester.end) : null;
  if(d>=firstStart&&d<=firstEnd)return {semester:"first" as const,effectiveFrom:rule.first_semester.start,effectiveTo:rule.first_semester.end,window:rule.first_semester.option_window,cancellationDeadline:rule.first_semester.cancellation_deadline};
- if(d>=secondStart&&d<=secondEnd)return {semester:"second" as const,effectiveFrom:rule.second_semester.start,effectiveTo:rule.second_semester.end,window:rule.second_semester.option_window,cancellationDeadline:rule.second_semester.cancellation_deadline};
+ if(secondStart&&secondEnd&&d>=secondStart&&d<=secondEnd)return {semester:"second" as const,effectiveFrom:rule.second_semester!.start,effectiveTo:rule.second_semester!.end,window:rule.second_semester!.option_window,cancellationDeadline:rule.second_semester!.cancellation_deadline};
  throw new Error("period is outside the 2027 IBS/CBS option framework");
 }
 
@@ -40,7 +40,7 @@ export async function recordIbsCbsOptionEvent(input:{companyId:string;eventType:
  const {effectiveFrom,effectiveTo,window,cancellationDeadline}=semesterDates(rule,input.period);
  const now=input.now??new Date();
  const windowStart=dateOnly(window.start),windowEnd=dateOnly(window.end),deadline=dateOnly(cancellationDeadline);
- const cancellationWindow=(rule as any).cancellation_window ?? {start:window.start,end:cancellationDeadline};
+ const cancellationWindow=rule.first_semester.cancellation_window ?? {start:window.start,end:cancellationDeadline};
  const cancellationStart=dateOnly(cancellationWindow.start),cancellationEnd=dateOnly(cancellationWindow.end);
  if(input.eventType==="elected"){
    if(now<windowStart||now>windowEnd)throw new Error("IBS/CBS election window has closed");
