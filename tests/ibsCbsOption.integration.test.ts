@@ -16,7 +16,7 @@ test(
       assert.equal(seed.rowCount, 1);
       const companyId = seed.rows[0].id as string;
       const ruleResult = await pool.query(
-        "SELECT id, parameters FROM tax_rules WHERE code='SIMPLES_NACIONAL_IBS_CBS_OPTIONS_2027' LIMIT 1",
+        "SELECT id, parameters FROM tax_rules WHERE code='SIMPLES_NACIONAL_IBS_CBS_OPTIONS_2027' AND active=true ORDER BY version DESC LIMIT 1",
       );
       assert.equal(ruleResult.rowCount, 1);
       const rule = ruleResult.rows[0].parameters;
@@ -66,6 +66,31 @@ test(
           now: new Date("2027-04-01T12:00:00Z"),
         }),
         /election window has closed/,
+      );
+    } finally {
+      await pool.end();
+    }
+  },
+);
+
+
+test(
+  "IBS/CBS cancellation cannot happen before the CGSN 194 cancellation window",
+  { skip: !databaseUrl },
+  async () => {
+    const pool = new pg.Pool({ connectionString: databaseUrl });
+    try {
+      const seed = await pool.query("SELECT id FROM tax_companies LIMIT 1");
+      assert.equal(seed.rowCount, 1);
+      const companyId = seed.rows[0].id as string;
+      const ruleResult = await pool.query("SELECT id FROM tax_rules WHERE code='SIMPLES_NACIONAL_IBS_CBS_OPTIONS_2027' AND active=true ORDER BY version DESC LIMIT 1");
+      assert.equal(ruleResult.rowCount, 1);
+      await assert.rejects(
+        recordIbsCbsOptionEvent({
+          companyId, eventType: "cancelled", period: "2027-01-15", ruleVersionId: ruleResult.rows[0].id as string,
+          now: new Date("2026-11-02T12:00:00Z"),
+        }),
+        /cancellation window is closed/,
       );
     } finally {
       await pool.end();
