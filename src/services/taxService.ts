@@ -367,6 +367,9 @@ export type FatorRRuleParameters = {
   };
   startup_fixed_months?: number;
   startup_fixed_factor?: number;
+  zero_both_factor?: number;
+  zero_revenue_factor?: number;
+  zero_fs_factor?: number;
   window_basis?: string;
 };
 
