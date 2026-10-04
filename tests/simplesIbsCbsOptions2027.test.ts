@@ -40,6 +40,7 @@ test("2027 IBS/CBS framework accepts first-semester boundary dates",()=>{
 
 const START_OF_ACTIVITY_RULE = {
   simples_nacional_cnpj_registration_window:{start:"2026-10-16",end:"2026-12-31"},
+  simples_nacional_effective_window:{start:"2027-01-01",end:"2027-12-31"},
   ibs_cbs_cnpj_registration_window:{start:"2026-10-31",end:"2026-12-31"},
   option_at_cnpj_registration:true as const,
   ibs_cbs_effective_window:{start:"2027-01-01",end:"2027-06-30"},
