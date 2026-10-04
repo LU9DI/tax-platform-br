@@ -137,3 +137,27 @@ test(
     }
   },
 );
+
+
+test(
+  "IBS/CBS second-semester election is rejected when first-semester hybrid remains active",
+  { skip: !databaseUrl },
+  async () => {
+    const pool = new pg.Pool({ connectionString: databaseUrl });
+    try {
+      const seed = await pool.query("SELECT id FROM tax_companies LIMIT 1");
+      assert.equal(seed.rowCount, 1);
+      const companyId = seed.rows[0].id as string;
+      const ruleResult = await pool.query("SELECT id FROM tax_rules WHERE code='SIMPLES_NACIONAL_IBS_CBS_OPTIONS_2027' AND active=true ORDER BY version DESC LIMIT 1");
+      assert.equal(ruleResult.rowCount, 1);
+      const ruleVersionId = ruleResult.rows[0].id as string;
+      await recordIbsCbsOptionEvent({ companyId, eventType: "elected", period: "2027-01-15", ruleVersionId, now: new Date("2026-09-15T12:00:00Z") });
+      await assert.rejects(
+        recordIbsCbsOptionEvent({ companyId, eventType: "elected", period: "2027-07-15", ruleVersionId, now: new Date("2027-03-15T12:00:00Z") }),
+        /first-semester hybrid option remains active/,
+      );
+    } finally {
+      await pool.end();
+    }
+  },
+);
