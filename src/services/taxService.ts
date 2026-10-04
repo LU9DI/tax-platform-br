@@ -175,10 +175,10 @@ export type SimplesNationalIbsCbsOptionRule = {
 };
 
 export type SimplesNationalIbsCbsStartOfActivityRule = {
-  cnpj_registration_window: { start: string; end: string };
+  ibs_cbs_cnpj_registration_window: { start: string; end: string };
   option_at_cnpj_registration: true;
   ibs_cbs_effective_window: { start: string; end: string };
-  effect_basis: "cnpj_registration_for_simples_and_ibs_cbs";
+  effect_basis: "cnpj_registration_for_ibs_cbs";
 };
 
 function validIsoDate(value: string, name: string) {
@@ -199,11 +199,11 @@ export function resolveSimplesNationalIbsCbsStartOfActivityOption(input: {
   const period = validIsoDate(input.period, "period");
   const special = input.startOfActivityRule ?? input.rule.start_of_activity;
   if (!special) throw new Error("start-of-activity rule is unavailable");
-  const registrationStart = validIsoDate(special.cnpj_registration_window.start, "start-of-activity registration window start");
-  const registrationEnd = validIsoDate(special.cnpj_registration_window.end, "start-of-activity registration window end");
+  const registrationStart = validIsoDate(special.ibs_cbs_cnpj_registration_window.start, "IBS/CBS start-of-activity registration window start");
+  const registrationEnd = validIsoDate(special.ibs_cbs_cnpj_registration_window.end, "IBS/CBS start-of-activity registration window end");
   const effectStart = validIsoDate(special.ibs_cbs_effective_window.start, "IBS/CBS effect window start");
   const effectEnd = validIsoDate(special.ibs_cbs_effective_window.end, "IBS/CBS effect window end");
-  if (special.option_at_cnpj_registration !== true || special.effect_basis !== "cnpj_registration_for_simples_and_ibs_cbs") {
+  if (special.option_at_cnpj_registration !== true || special.effect_basis !== "cnpj_registration_for_ibs_cbs") {
     throw new Error("invalid start-of-activity rule");
   }
   if (registration < registrationStart || registration > registrationEnd) {
