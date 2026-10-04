@@ -54,6 +54,8 @@ export async function recordIbsCbsOptionEvent(input:{companyId:string;eventType:
    if(now<windowStart||now>windowEnd)throw new Error("IBS/CBS election window has closed");
  } else if(input.eventType==="cancelled") {
    if(!cancellationWindow)throw new Error("second-semester cancellation is not the applicable flow");
+   const prior=await db.query("SELECT event_type FROM tax_company_ibs_cbs_option_events WHERE company_id=$1 AND effective_from=$2 AND effective_to=$3 ORDER BY occurred_at DESC LIMIT 1",[input.companyId,effectiveFrom,effectiveTo]);
+   if(prior.rows[0]?.event_type!=="elected")throw new Error("IBS/CBS cancellation requires an active hybrid option");
    if(!cancellationStart||!cancellationEnd||now<cancellationStart||now>cancellationEnd)throw new Error("IBS/CBS cancellation window is closed");
    if(deadline && now>deadline)throw new Error("IBS/CBS cancellation deadline has passed");
  } else {
