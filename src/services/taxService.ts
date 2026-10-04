@@ -427,17 +427,24 @@ export function calculateFatorR(input: FatorRInput, rule: FatorRRuleParameters, 
     }
   }
 
+  const zeroBothFactor = Number(rule?.zero_both_factor);
+  const zeroRevenueFactor = Number(rule?.zero_revenue_factor);
+  const zeroFsFactor = Number(rule?.zero_fs_factor);
+  if (![zeroBothFactor, zeroRevenueFactor, zeroFsFactor].every(Number.isFinite)) {
+    throw new Error("Fator R zero-case parameters are unavailable");
+  }
+
   let factorR: number;
   let thresholdComparison: "greater_or_equal" | "below";
   if (factorNumerator === 0 && factorDenominator === 0) {
-    factorR = 0.01;
-    thresholdComparison = "below";
+    factorR = zeroBothFactor;
+    thresholdComparison = factorR >= threshold ? "greater_or_equal" : "below";
   } else if (factorNumerator > 0 && factorDenominator === 0) {
-    factorR = 0.28;
-    thresholdComparison = "greater_or_equal";
+    factorR = zeroRevenueFactor;
+    thresholdComparison = factorR >= threshold ? "greater_or_equal" : "below";
   } else if (factorNumerator === 0 && factorDenominator > 0) {
-    factorR = 0.01;
-    thresholdComparison = "below";
+    factorR = zeroFsFactor;
+    thresholdComparison = factorR >= threshold ? "greater_or_equal" : "below";
   } else {
     factorR = factorNumerator / factorDenominator;
     thresholdComparison = factorR >= threshold ? "greater_or_equal" : "below";
