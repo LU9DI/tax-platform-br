@@ -169,7 +169,7 @@ export const calculateSimplesNationalAnexoII = (input: {
 export type SimplesNationalIbsCbsOptionRule = {
   models: readonly ["simples_puro","simples_hibrido"];
   first_semester: { start: string; end: string; option_window: { start: string; end: string }; cancellation_window?: { start: string; end: string }; cancellation_deadline: string };
-  second_semester: { start: string; end: string; option_window: { start: string; end: string }; cancellation_window?: { start: string; end: string }; cancellation_deadline: string };
+  second_semester?: { start: string; end: string; option_window: { start: string; end: string }; cancellation_window?: { start: string; end: string }; cancellation_deadline: string };
   regular_ibs_cbs_rates: null;
 };
 
@@ -185,10 +185,10 @@ export function resolveSimplesNationalIbsCbsOption(input: {
   const rule = input.rule;
   if (!rule || rule.regular_ibs_cbs_rates !== null) throw new Error("invalid IBS/CBS option rule");
   const first = period >= new Date(rule.first_semester.start + "T00:00:00Z") && period <= new Date(rule.first_semester.end + "T00:00:00Z");
-  const second = period >= new Date(rule.second_semester.start + "T00:00:00Z") && period <= new Date(rule.second_semester.end + "T00:00:00Z");
+  const second = !!rule.second_semester && period >= new Date(rule.second_semester.start + "T00:00:00Z") && period <= new Date(rule.second_semester.end + "T00:00:00Z");
   if (!first && !second) throw new Error("period is outside the 2027 IBS/CBS option framework");
   const semester = first ? "first" : "second";
-  const window = first ? rule.first_semester.option_window : rule.second_semester.option_window;
+  const window = first ? rule.first_semester.option_window : rule.second_semester!.option_window;
 
   if (input.optionModel && !rule.models.includes(input.optionModel)) {
     throw new Error("unsupported IBS/CBS option model");
@@ -214,9 +214,9 @@ export function resolveSimplesNationalIbsCbsOption(input: {
     optionModel: selectedModel,
     decisionSource,
     effectStart: first ? rule.first_semester.start : rule.second_semester.start,
-    effectEnd: first ? rule.first_semester.end : rule.second_semester.end,
+    effectEnd: first ? rule.first_semester.end : rule.second_semester!.end,
     optionWindow: window,
-    cancellationDeadline: first ? rule.first_semester.cancellation_deadline : rule.second_semester.cancellation_deadline,
+    cancellationDeadline: first ? rule.first_semester.cancellation_deadline : rule.second_semester!.cancellation_deadline,
     regularIbsCbsRatesAvailable: false,
     note: "Option framework only; regular IBS/CBS rates must be resolved from a separate applicable normative rule. A prior hybrid election continues into subsequent periods unless explicitly renounced or replaced within the applicable option window."
   };
