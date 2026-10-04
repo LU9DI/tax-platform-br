@@ -24,7 +24,7 @@ VALUES
   '{"threshold":0.28,"period_months":12,"ratio":"FS12/RBT12","zero_both_factor":0.01,"zero_revenue_factor":0.28,"zero_fs_factor":0.01,"fs12":{"includes":["employee_and_avulso_remuneration","individual_contributor_remuneration","13th_salary","employer_social_security_contribution","FGTS"],"excludes_examples":["rent","profit_distribution","intern_payments","MEI_payments"]},"rbt12":{"basis":"revenue_accrued_in_the_12_months_before_calculation_period"},"selection":{"greater_or_equal_threshold":"III","below_threshold":"V"}}',
   '2026-01-01','2026-12-31',true
 )
-ON CONFLICT (tax_year,code,version) DO NOTHING;
+ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO tax_rules
 (id,tax_year,code,name,version,source_url,source_reference,parameters,effective_from,effective_to,active)
@@ -40,4 +40,4 @@ VALUES
   '{"threshold":0.28,"period_months":12,"ratio":"FS12/RBT12","window_basis":"12_months_antecedent_to_month_before_PA","startup_fixed_months":2,"startup_fixed_factor":0.28,"zero_both_factor":0.01,"zero_revenue_factor":0.28,"zero_fs_factor":0.01,"startup_after_second_month_basis":"FS12/RBT12","fs12":{"includes":["employee_and_avulso_remuneration","individual_contributor_remuneration","13th_salary","employer_social_security_contribution","FGTS"]},"selection":{"greater_or_equal_threshold":"III","below_threshold":"V"}}',
   '2027-01-01','2027-12-31',true
 )
-ON CONFLICT (tax_year,code,version) DO NOTHING;
+ON CONFLICT (id) DO NOTHING;
