@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { resolveSimplesNationalIbsCbsOption, resolveSimplesNationalIbsCbsStartOfActivityOption } from "../src/services/taxService.js";
+import { resolveSimplesNationalIbsCbsOption, resolveSimplesNationalIbsCbsStartOfActivityOption, resolveSimplesNationalStartOfActivityOption } from "../src/services/taxService.js";
 
 const RULE = {
   models: ["simples_puro","simples_hibrido"] as ["simples_puro","simples_hibrido"],
@@ -39,6 +39,7 @@ test("2027 IBS/CBS framework accepts first-semester boundary dates",()=>{
 });
 
 const START_OF_ACTIVITY_RULE = {
+  simples_nacional_cnpj_registration_window:{start:"2026-10-16",end:"2026-12-31"},
   ibs_cbs_cnpj_registration_window:{start:"2026-10-31",end:"2026-12-31"},
   option_at_cnpj_registration:true as const,
   ibs_cbs_effective_window:{start:"2027-01-01",end:"2027-06-30"},
@@ -76,4 +77,37 @@ test("2027 IBS/CBS start-of-activity exception rejects periods outside Jan-Jun",
     rule:RULE,
     startOfActivityRule:START_OF_ACTIVITY_RULE
   }),/outside the start-of-activity IBS\/CBS effect window/);
+});
+
+test("2027 Simples Nacional start-of-activity option uses the separate CNPJ registration window",()=>{
+  const r=resolveSimplesNationalStartOfActivityOption({
+    cnpjRegistrationDate:"2026-10-16",
+    period:"2027-01-01",
+    rule:RULE,
+    startOfActivityRule:START_OF_ACTIVITY_RULE
+  });
+  assert.equal(r.decisionSource,"start_of_activity_cnpj_registration");
+  assert.equal(r.optionAtCnpjRegistration,true);
+  assert.deepEqual(r.optionWindow,{start:"2026-10-16",end:"2026-10-16"});
+  assert.equal(r.effectStart,"2027-01-01");
+  assert.equal(r.effectEnd,"2027-12-31");
+});
+
+test("2027 Simples Nacional start-of-activity option accepts the last normative registration date",()=>{
+  const r=resolveSimplesNationalStartOfActivityOption({
+    cnpjRegistrationDate:"2026-12-31",
+    period:"2027-12-31",
+    rule:RULE,
+    startOfActivityRule:START_OF_ACTIVITY_RULE
+  });
+  assert.equal(r.optionAtCnpjRegistration,true);
+});
+
+test("2027 Simples National start-of-activity option rejects registrations before its normative boundary",()=>{
+  assert.throws(()=>resolveSimplesNationalStartOfActivityOption({
+    cnpjRegistrationDate:"2026-10-15",
+    period:"2027-01-01",
+    rule:RULE,
+    startOfActivityRule:START_OF_ACTIVITY_RULE
+  }),/outside the 2027 Simples Nacional start-of-activity exception/);
 });
