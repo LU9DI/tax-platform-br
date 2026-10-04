@@ -1,8 +1,7 @@
 -- Normative update: Resolução CGSN nº 194/2026 (published 2026-09-28).
 -- Preserve the prior rule for historical calculations; do not rewrite its parameters.
 UPDATE tax_rules
-SET active = false,
-    effective_to = DATE '2026-09-27'
+SET active = false
 WHERE id = '00000000-0000-4000-8000-000000000273'
   AND code = 'SIMPLES_NACIONAL_IBS_CBS_OPTIONS_2027'
   AND version = '2027.1';
