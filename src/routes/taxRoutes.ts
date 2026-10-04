@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { randomUUID } from "node:crypto";
-import { prepareTaxProfile, simulateConsumptionTransition, calculateMeiLoad, calculateSimplesNationalAnexoI, calculateSimplesNationalAnexoII, calculateSimplesNationalByAnnex, calculateFatorR, resolveSimplesNationalMonthlyRevenue, resolveSimplesNationalIbsCbsOption } from "../services/taxService.js";
+import { prepareTaxProfile, simulateConsumptionTransition, calculateMeiLoad, calculateSimplesNationalAnexoI, calculateSimplesNationalAnexoII, calculateSimplesNationalByAnnex, calculateFatorR, resolveSimplesNationalMonthlyRevenue, resolveSimplesNationalIbsCbsOption, resolveSimplesNationalStartOfActivityOption } from "../services/taxService.js";
 import { getEffectiveIbsCbsOption, recordIbsCbsOptionEvent } from "../services/ibsCbsOptionService.js";
 import { classifyFactorRActivity } from "../services/taxActivityClassificationService.js";
 import { initDb } from "../core/db.js";
@@ -78,6 +78,27 @@ router.post("/simples-nacional/anexo-i",requireAuth,calculationRateLimit,async(r
  res.json(enriched);
 }catch(e){if(e instanceof Error && (e as Error & {code?:string}).code==="IDEMPOTENCY_CONFLICT")return res.status(409).json({error:e.message});if(e instanceof Error && (e as Error & {code?:string}).code==="54000")return res.status(429).json({error:e.message});res.status(400).json({error:e instanceof Error?e.message:"invalid Simples Nacional data"});}});
 
+router.post("/simples-nacional/start-of-activity-option",requireAuth,calculationRateLimit,async(req,res)=>{try{
+ const cnpjRegistrationDate=typeof req.body?.cnpjRegistrationDate==="string"?req.body.cnpjRegistrationDate.trim():"";
+ const period=typeof req.body?.period==="string"?req.body.period.trim():"";
+ if(!cnpjRegistrationDate)return res.status(400).json({error:"cnpjRegistrationDate is required"});
+ if(!period)return res.status(400).json({error:"period is required"});
+ if(!/^2027-\\d{2}-\\d{2}$/.test(period))return res.status(400).json({error:"period must be in 2027"});
+ const rule=await getEffectiveTaxRule("SIMPLES_NACIONAL_IBS_CBS_OPTIONS_2027",new Date(period+"T00:00:00Z"));
+ if(!rule)return res.status(404).json({error:"Simples Nacional 2027 option rule not found for requested period"});
+ const companyId=typeof req.body?.companyId==="string"&&req.body.companyId.trim()?req.body.companyId.trim():null;
+ if(!companyId)return res.status(400).json({error:"companyId is required for audited calculations"});
+ const output=resolveSimplesNationalStartOfActivityOption({
+   cnpjRegistrationDate,
+   period,
+   rule:rule.parameters as any
+ });
+ const input={cnpjRegistrationDate,period,optionDecision:"start_of_activity_cnpj_registration"};
+ const enriched={...output,ruleVersion:{id:rule.id,code:rule.rule_code,version:rule.version,effectiveFrom:rule.effective_from,effectiveTo:rule.effective_to,sourceUrl:rule.source_url,sourceReference:rule.source_reference,parameters:rule.parameters}};
+ const audit=await recordTaxCalculation(companyId,(req as any).userId,"simples_nacional_start_of_activity_option",input,enriched,rule.id,parseIdempotencyKey(req));
+ if(!audit)return res.status(403).json({error:"company not found or not owned by user"});
+ res.json(enriched);
+}catch(e){if(e instanceof Error && (e as Error & {code?:string}).code==="IDEMPOTENCY_CONFLICT")return res.status(409).json({error:e.message});if(e instanceof Error && (e as Error & {code?:string}).code==="54000")return res.status(429).json({error:e.message});res.status(400).json({error:e instanceof Error?e.message:"invalid Simples Nacional start-of-activity data"});}});
 router.post("/simples-nacional/ibs-cbs-options",requireAuth,calculationRateLimit,async(req,res)=>{try{
  const period=typeof req.body?.period==="string"?req.body.period.trim():"";
  const year=Number(period.slice(0,4));
