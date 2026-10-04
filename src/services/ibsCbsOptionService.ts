@@ -225,7 +225,7 @@ export async function recordIbsCbsOptionEvent(input: {
     if (semester === "first" && state.model !== "simples_hibrido") {
       throw new Error("IBS/CBS cancellation requires an active hybrid option");
     }
-    if (semester === "second" && state.model !== "simples_hibrido") {
+    if (semester === "second" && state.model !== "simples_hibrido" && history.at(-1)?.event_type !== "renounced") {
       throw new Error("IBS/CBS second-semester cancellation requires an active hybrid option or an explicit renunciation");
     }
     assertDateInWindow(now, cancellationWindow.start, cancellationWindow.end, "IBS/CBS cancellation window is closed");
