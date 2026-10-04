@@ -3,6 +3,14 @@
 -- Source: Portal do Simples Nacional / Perguntas e Respostas do MEI, 2026.
 -- Standard MEI only; MEI Caminhoneiro has a separate legal table and is intentionally excluded.
 
+-- Retire any previously active MEI_2026 rule before installing this authoritative version.
+-- The effectivity guard intentionally rejects overlapping active validity periods.
+UPDATE tax_rules
+SET active = false
+WHERE code = 'MEI_2026'
+  AND tax_year = 2026
+  AND active = true;
+
 INSERT INTO tax_rules
 (id,tax_year,code,name,version,source_url,source_reference,parameters,effective_from,effective_to,active)
 VALUES
