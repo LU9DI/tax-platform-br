@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { initDb } from "../core/db.js";
 import type { SimplesNationalIbsCbsOptionRule } from "./taxService.js";
 
-type EventType = "elected" | "cancelled";
+type EventType = "elected" | "cancelled" | "renounced";
 
 function dateOnly(value:string){if(!/^\d{4}-\d{2}-\d{2}$/.test(value))throw new Error("invalid date");const d=new Date(value+"T00:00:00Z");if(Number.isNaN(d.getTime())||d.toISOString().slice(0,10)!==value)throw new Error("invalid date");return d;}
 
@@ -27,7 +27,7 @@ export async function getEffectiveIbsCbsOption(companyId:string,period:string,ru
  let previousSemesterModel:"simples_puro"|"simples_hibrido"|undefined;
  if(semester==="second" && prior.rows[0]?.event_type==="elected") previousSemesterModel="simples_hibrido";
  if(currentEvent?.event_type==="elected") model="simples_hibrido";
- else if(currentEvent?.event_type==="cancelled") model="simples_puro";
+ else if(currentEvent?.event_type==="cancelled" || currentEvent?.event_type==="renounced") model="simples_puro";
  else if(previousSemesterModel==="simples_hibrido") model="simples_hibrido";
  return {model,previousSemesterModel,event:currentEvent};
 }
@@ -48,10 +48,14 @@ export async function recordIbsCbsOptionEvent(input:{companyId:string;eventType:
  const cancellationEnd=cancellationWindow?dateOnly(cancellationWindow.end):null;
  if(input.eventType==="elected"){
    if(now<windowStart||now>windowEnd)throw new Error("IBS/CBS election window has closed");
- } else {
-   if(!cancellationWindow)throw new Error("second-semester renunciation requires the dedicated renunciation flow");
+ } else if(input.eventType==="cancelled") {
+   if(!cancellationWindow)throw new Error("second-semester cancellation is not the applicable flow");
    if(!cancellationStart||!cancellationEnd||now<cancellationStart||now>cancellationEnd)throw new Error("IBS/CBS cancellation window is closed");
    if(deadline && now>deadline)throw new Error("IBS/CBS cancellation deadline has passed");
+ } else {
+   if(!renunciationWindow)throw new Error("IBS/CBS renunciation window is not available");
+   const renunciationStart=dateOnly(renunciationWindow.start),renunciationEnd=dateOnly(renunciationWindow.end);
+   if(now<renunciationStart||now>renunciationEnd)throw new Error("IBS/CBS renunciation window is closed");
  }
  const id=randomUUID();
  await db.query("INSERT INTO tax_company_ibs_cbs_option_events (id,company_id,event_type,model,effective_from,effective_to,option_window_start,option_window_end,cancellation_window_start,cancellation_deadline,rule_version_id) VALUES ($1,$2,$3,'simples_hibrido',$4,$5,$6,$7,$8,$9,$10) ON CONFLICT (company_id,effective_from,effective_to,event_type) DO NOTHING",[id,input.companyId,input.eventType,effectiveFrom,effectiveTo,window.start,window.end,cancellationWindow?.start ?? null,cancellationDeadline ?? null,input.ruleVersionId]);
