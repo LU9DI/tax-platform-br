@@ -213,7 +213,7 @@ export function resolveSimplesNationalIbsCbsOption(input: {
     semester,
     optionModel: selectedModel,
     decisionSource,
-    effectStart: first ? rule.first_semester.start : rule.second_semester.start,
+    effectStart: first ? rule.first_semester.start : rule.second_semester!.start,
     effectEnd: first ? rule.first_semester.end : rule.second_semester!.end,
     optionWindow: window,
     cancellationDeadline: first ? rule.first_semester.cancellation_deadline : rule.second_semester!.cancellation_deadline,
