@@ -10,8 +10,8 @@ function semesterDates(rule:SimplesNationalIbsCbsOptionRule,period:string){
  const d=dateOnly(period);
  const firstStart=dateOnly(rule.first_semester.start), firstEnd=dateOnly(rule.first_semester.end);
  const secondStart=rule.second_semester ? dateOnly(rule.second_semester.start) : null, secondEnd=rule.second_semester ? dateOnly(rule.second_semester.end) : null;
- if(d>=firstStart&&d<=firstEnd)return {semester:"first" as const,effectiveFrom:rule.first_semester.start,effectiveTo:rule.first_semester.end,window:rule.first_semester.option_window,cancellationDeadline:rule.first_semester.cancellation_deadline};
- if(secondStart&&secondEnd&&d>=secondStart&&d<=secondEnd)return {semester:"second" as const,effectiveFrom:rule.second_semester!.start,effectiveTo:rule.second_semester!.end,window:rule.second_semester!.option_window,cancellationDeadline:rule.second_semester!.cancellation_deadline};
+ if(d>=firstStart&&d<=firstEnd)return {semester:"first" as const,effectiveFrom:rule.first_semester.start,effectiveTo:rule.first_semester.end,window:rule.first_semester.option_window,cancellationDeadline:rule.first_semester.cancellation_deadline ?? null,renunciationWindow:undefined};
+ if(secondStart&&secondEnd&&d>=secondStart&&d<=secondEnd)return {semester:"second" as const,effectiveFrom:rule.second_semester!.start,effectiveTo:rule.second_semester!.end,window:rule.second_semester!.option_window,cancellationDeadline:rule.second_semester!.cancellation_deadline ?? null,renunciationWindow:rule.second_semester!.renunciation_window};
  throw new Error("period is outside the 2027 IBS/CBS option framework");
 }
 
@@ -37,17 +37,21 @@ export async function recordIbsCbsOptionEvent(input:{companyId:string;eventType:
  const ruleResult=await db.query("SELECT parameters FROM tax_rules WHERE id=$1 AND code='SIMPLES_NACIONAL_IBS_CBS_OPTIONS_2027'",[input.ruleVersionId]);
  if(!ruleResult.rowCount)throw new Error("IBS/CBS option rule not found");
  const rule=ruleResult.rows[0].parameters as SimplesNationalIbsCbsOptionRule;
- const {effectiveFrom,effectiveTo,window,cancellationDeadline}=semesterDates(rule,input.period);
+ const {effectiveFrom,effectiveTo,window,cancellationDeadline,renunciationWindow}=semesterDates(rule,input.period);
  const now=input.now??new Date();
- const windowStart=dateOnly(window.start),windowEnd=dateOnly(window.end),deadline=dateOnly(cancellationDeadline);
- const cancellationWindow=rule.first_semester.cancellation_window ?? {start:window.start,end:cancellationDeadline};
+ const windowStart=dateOnly(window.start),windowEnd=dateOnly(window.end);
+ const deadline=cancellationDeadline?dateOnly(cancellationDeadline):null;
+ const cancellationWindow=semesterDates(rule,input.period).semester==="first"
+   ? (rule.first_semester.cancellation_window ?? (deadline?{start:window.start,end:cancellationDeadline!}:window))
+   : null;
  const cancellationStart=dateOnly(cancellationWindow.start),cancellationEnd=dateOnly(cancellationWindow.end);
  if(input.eventType==="elected"){
    if(now<windowStart||now>windowEnd)throw new Error("IBS/CBS election window has closed");
  } else {
+   if(!cancellationWindow)throw new Error("second-semester renunciation requires the dedicated renunciation flow");
    if(now<cancellationStart||now>cancellationEnd)throw new Error("IBS/CBS cancellation window is closed");
+   if(deadline && now>deadline)throw new Error("IBS/CBS cancellation deadline has passed");
  }
- if(input.eventType==="cancelled" && now>deadline)throw new Error("IBS/CBS cancellation deadline has passed");
  const id=randomUUID();
  await db.query("INSERT INTO tax_company_ibs_cbs_option_events (id,company_id,event_type,model,effective_from,effective_to,option_window_start,option_window_end,cancellation_window_start,cancellation_deadline,rule_version_id) VALUES ($1,$2,$3,'simples_hibrido',$4,$5,$6,$7,$8,$9,$10) ON CONFLICT (company_id,effective_from,effective_to,event_type) DO NOTHING",[id,input.companyId,input.eventType,effectiveFrom,effectiveTo,window.start,window.end,cancellationWindow.start,cancellationDeadline,input.ruleVersionId]);
  return id;
