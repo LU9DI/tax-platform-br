@@ -4,7 +4,7 @@ import { resolveSimplesNationalIbsCbsOption } from "../src/services/taxService.j
 
 const RULE = {
   models: ["simples_puro","simples_hibrido"] as ["simples_puro","simples_hibrido"],
-  first_semester:{start:"2027-01-01",end:"2027-06-30",option_window:{start:"2026-09-01",end:"2026-09-30"},cancellation_deadline:"2026-11-30"},
+  first_semester:{start:"2027-01-01",end:"2027-06-30",option_window:{start:"2026-09-01",end:"2026-10-30"},cancellation_window:{start:"2026-11-03",end:"2026-12-20"},cancellation_deadline:"2026-12-20"},
   second_semester:{start:"2027-07-01",end:"2027-12-31",option_window:{start:"2027-03-01",end:"2027-03-31"},cancellation_deadline:"2027-05-31"},
   regular_ibs_cbs_rates:null
 };
@@ -14,7 +14,8 @@ test("2027 IBS/CBS option resolves first semester without inventing rates",()=>{
   assert.equal(r.semester,"first");
   assert.equal(r.optionModel,"simples_hibrido");
   assert.equal(r.regularIbsCbsRatesAvailable,false);
-  assert.deepEqual(r.optionWindow,{start:"2026-09-01",end:"2026-09-30"});
+  assert.deepEqual(r.optionWindow,{start:"2026-09-01",end:"2026-10-30"});
+  assert.equal(r.cancellationDeadline,"2026-12-20");
 });
 
 test("2027 IBS/CBS option resolves second semester window",()=>{
@@ -26,4 +27,9 @@ test("2027 IBS/CBS option resolves second semester window",()=>{
 
 test("2027 IBS/CBS option rejects unsupported period",()=>{
   assert.throws(()=>resolveSimplesNationalIbsCbsOption({period:"2026-12-01",rule: RULE}),/invalid period|outside the 2027 IBS\/CBS option framework/);
+});
+
+
+test("2027 IBS/CBS option rejects impossible calendar dates",()=>{
+  assert.throws(()=>resolveSimplesNationalIbsCbsOption({period:"2027-02-30",rule:RULE}),/invalid period/);
 });
