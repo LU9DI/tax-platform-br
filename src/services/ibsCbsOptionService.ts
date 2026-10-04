@@ -64,6 +64,9 @@ export async function recordIbsCbsOptionEvent(input:{companyId:string;eventType:
    if(now<renunciationStart||now>renunciationEnd)throw new Error("IBS/CBS renunciation window is closed");
  }
  const id=randomUUID();
- await db.query("INSERT INTO tax_company_ibs_cbs_option_events (id,company_id,event_type,model,effective_from,effective_to,option_window_start,option_window_end,cancellation_window_start,renunciation_window_start,renunciation_window_end,cancellation_deadline,rule_version_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) ON CONFLICT (company_id,effective_from,effective_to,event_type) DO NOTHING",[id,input.companyId,input.eventType,input.eventType==='elected'?'simples_hibrido':'simples_puro',effectiveFrom,effectiveTo,window.start,window.end,cancellationWindow?.start ?? null,renunciationWindow?.start ?? null,renunciationWindow?.end ?? null,cancellationDeadline ?? null,input.ruleVersionId]);
- return id;
+ const inserted=await db.query("INSERT INTO tax_company_ibs_cbs_option_events (id,company_id,event_type,model,effective_from,effective_to,option_window_start,option_window_end,cancellation_window_start,renunciation_window_start,renunciation_window_end,cancellation_deadline,rule_version_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) ON CONFLICT (company_id,effective_from,effective_to,event_type) DO NOTHING RETURNING id",[id,input.companyId,input.eventType,input.eventType==='elected'?'simples_hibrido':'simples_puro',effectiveFrom,effectiveTo,window.start,window.end,cancellationWindow?.start ?? null,renunciationWindow?.start ?? null,renunciationWindow?.end ?? null,cancellationDeadline ?? null,input.ruleVersionId]);
+ if(inserted.rowCount) return inserted.rows[0].id as string;
+ const existing=await db.query("SELECT id FROM tax_company_ibs_cbs_option_events WHERE company_id=$1 AND effective_from=$2 AND effective_to=$3 AND event_type=$4 LIMIT 1",[input.companyId,effectiveFrom,effectiveTo,input.eventType]);
+ if(!existing.rowCount) throw new Error("IBS/CBS option event could not be persisted");
+ return existing.rows[0].id as string;
 }
