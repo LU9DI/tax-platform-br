@@ -173,6 +173,63 @@ export type SimplesNationalIbsCbsOptionRule = {
   regular_ibs_cbs_rates: null;
 };
 
+export type SimplesNationalIbsCbsStartOfActivityRule = {
+  cnpj_registration_window: { start: string; end: string };
+  option_at_cnpj_registration: true;
+  ibs_cbs_effective_window: { start: string; end: string };
+  effect_basis: "cnpj_registration_for_simples_and_ibs_cbs";
+};
+
+function validIsoDate(value: string, name: string) {
+  if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(value)) throw new Error(`invalid ${name}`);
+  const d = new Date(value + "T00:00:00Z");
+  if (Number.isNaN(d.getTime()) || d.toISOString().slice(0, 10) !== value) throw new Error(`invalid ${name}`);
+  return d;
+}
+
+export function resolveSimplesNationalIbsCbsStartOfActivityOption(input: {
+  cnpjRegistrationDate: string;
+  period: string;
+  optionModel?: "simples_puro" | "simples_hibrido";
+  rule: SimplesNationalIbsCbsOptionRule;
+  startOfActivityRule: SimplesNationalIbsCbsStartOfActivityRule;
+}) {
+  const registration = validIsoDate(input.cnpjRegistrationDate, "cnpjRegistrationDate");
+  const period = validIsoDate(input.period, "period");
+  const special = input.startOfActivityRule;
+  const registrationStart = validIsoDate(special.cnpj_registration_window.start, "start-of-activity registration window start");
+  const registrationEnd = validIsoDate(special.cnpj_registration_window.end, "start-of-activity registration window end");
+  const effectStart = validIsoDate(special.ibs_cbs_effective_window.start, "IBS/CBS effect window start");
+  const effectEnd = validIsoDate(special.ibs_cbs_effective_window.end, "IBS/CBS effect window end");
+  if (special.option_at_cnpj_registration !== true || special.effect_basis !== "cnpj_registration_for_simples_and_ibs_cbs") {
+    throw new Error("invalid start-of-activity rule");
+  }
+  if (registration < registrationStart || registration > registrationEnd) {
+    throw new Error("CNPJ registration is outside the 2027 start-of-activity exception");
+  }
+  if (period < effectStart || period > effectEnd) {
+    throw new Error("period is outside the start-of-activity IBS/CBS effect window");
+  }
+  const optionModel = input.optionModel ?? "simples_puro";
+  if (!input.rule.models.includes(optionModel)) throw new Error("unsupported IBS/CBS option model");
+  return {
+    year: 2027,
+    semester: "first" as const,
+    optionModel,
+    decisionSource: "start_of_activity_cnpj_registration" as const,
+    cnpjRegistrationDate: input.cnpjRegistrationDate,
+    effectStart: special.ibs_cbs_effective_window.start,
+    effectEnd: special.ibs_cbs_effective_window.end,
+    optionWindow: {
+      start: input.cnpjRegistrationDate,
+      end: input.cnpjRegistrationDate
+    },
+    cancellationDeadline: input.rule.first_semester.cancellation_deadline ?? null,
+    regularIbsCbsRatesAvailable: false,
+    note: "Start-of-activity option is made at CNPJ registration; the general 2026 option windows do not apply to registrations covered by the special rule."
+  };
+}
+
 export function resolveSimplesNationalIbsCbsOption(input: {
   period: string;
   optionModel?: "simples_puro" | "simples_hibrido";
