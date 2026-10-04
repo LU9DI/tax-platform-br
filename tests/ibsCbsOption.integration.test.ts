@@ -97,3 +97,43 @@ test(
     }
   },
 );
+
+
+test(
+  "IBS/CBS second-semester renunciation is distinct from 2026 cancellation",
+  { skip: !databaseUrl },
+  async () => {
+    const pool = new pg.Pool({ connectionString: databaseUrl });
+    try {
+      const seed = await pool.query("SELECT id FROM tax_companies LIMIT 1");
+      assert.equal(seed.rowCount, 1);
+      const companyId = seed.rows[0].id as string;
+      const ruleResult = await pool.query("SELECT id, parameters FROM tax_rules WHERE code='SIMPLES_NACIONAL_IBS_CBS_OPTIONS_2027' AND active=true ORDER BY version DESC LIMIT 1");
+      assert.equal(ruleResult.rowCount, 1);
+      const rule = ruleResult.rows[0].parameters;
+      const ruleVersionId = ruleResult.rows[0].id as string;
+
+      await recordIbsCbsOptionEvent({
+        companyId, eventType: "elected", period: "2027-01-15", ruleVersionId,
+        now: new Date("2026-09-15T12:00:00Z"),
+      });
+
+      await assert.rejects(
+        recordIbsCbsOptionEvent({
+          companyId, eventType: "renounced", period: "2027-08-01", ruleVersionId,
+          now: new Date("2027-02-28T12:00:00Z"),
+        }),
+        /renunciation window is closed/,
+      );
+
+      await recordIbsCbsOptionEvent({
+        companyId, eventType: "renounced", period: "2027-08-01", ruleVersionId,
+        now: new Date("2027-03-15T12:00:00Z"),
+      });
+      const state = await getEffectiveIbsCbsOption(companyId, "2027-08-01", rule);
+      assert.equal(state.model, "simples_puro");
+    } finally {
+      await pool.end();
+    }
+  },
+);
