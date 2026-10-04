@@ -175,7 +175,8 @@ export type SimplesNationalIbsCbsOptionRule = {
 };
 
 export type SimplesNationalIbsCbsStartOfActivityRule = {
-  simples_nacional_cnpj_registration_window?: { start: string; end: string };
+  simples_nacional_cnpj_registration_window: { start: string; end: string };
+  simples_nacional_effective_window: { start: string; end: string };
   ibs_cbs_cnpj_registration_window: { start: string; end: string };
   option_at_cnpj_registration: true;
   ibs_cbs_effective_window: { start: string; end: string };
@@ -184,6 +185,7 @@ export type SimplesNationalIbsCbsStartOfActivityRule = {
 
 export type SimplesNationalStartOfActivityRule = {
   simples_nacional_cnpj_registration_window: { start: string; end: string };
+  simples_nacional_effective_window: { start: string; end: string };
   option_at_cnpj_registration: true;
 };
 
@@ -220,8 +222,15 @@ export function resolveSimplesNationalStartOfActivityOption(input: {
   if (registration < registrationStart || registration > registrationEnd) {
     throw new Error("CNPJ registration is outside the 2027 Simples Nacional start-of-activity exception");
   }
-  if (period < validIsoDate("2027-01-01", "Simples Nacional 2027 effect start") ||
-      period > validIsoDate("2027-12-31", "Simples Nacional 2027 effect end")) {
+  const effectStart = validIsoDate(
+    special.simples_nacional_effective_window.start,
+    "Simples Nacional start-of-activity effect window start"
+  );
+  const effectEnd = validIsoDate(
+    special.simples_nacional_effective_window.end,
+    "Simples Nacional start-of-activity effect window end"
+  );
+  if (period < effectStart || period > effectEnd) {
     throw new Error("period is outside the 2027 Simples Nacional start-of-activity effect window");
   }
   return {
@@ -233,8 +242,8 @@ export function resolveSimplesNationalStartOfActivityOption(input: {
       start: input.cnpjRegistrationDate,
       end: input.cnpjRegistrationDate
     },
-    effectStart: "2027-01-01",
-    effectEnd: "2027-12-31",
+    effectStart: special.simples_nacional_effective_window.start,
+    effectEnd: special.simples_nacional_effective_window.end,
     note: "Simples Nacional option for start-of-activity companies is resolved from the CNPJ registration exception window; the general 2027 option window is not used for covered registrations."
   };
 }
