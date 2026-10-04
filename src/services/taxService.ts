@@ -384,21 +384,41 @@ export type FatorRRuleParameters = {
   window_basis?: string;
 };
 
+export type FatorRHistoryMonth = {
+  year: number;
+  month: number;
+  fs: number;
+  revenue: number;
+  regime?: "mei" | "simples_nacional" | "other";
+  origin?: string;
+};
+
 export type FatorRPeriodContext =
-  | { mode: "established" }
+  | {
+      mode: "established";
+      periodYear: number;
+      periodMonth: number;
+    }
   | {
       mode: "opening_month";
+      periodYear: number;
+      periodMonth: number;
+      openingYear: number;
+      openingMonth: number;
       fspa: number;
       rpa: number;
     }
   | {
       mode: "startup";
-      priorMonths: Array<{ year: number; month: number; fs: number; revenue: number }>;
+      periodYear: number;
+      periodMonth: number;
+      openingYear: number;
+      openingMonth: number;
+      priorMonths: FatorRHistoryMonth[];
     };
 
-export function calculateFatorR(input: FatorRInput, rule: FatorRRuleParameters, periodContext: FatorRPeriodContext = { mode: "established" }) {
+export function calculateFatorR(input: FatorRInput, rule: FatorRRuleParameters, periodContext: FatorRPeriodContext) {
   const revenue12m = finiteNonNegative(input.revenue12m, "revenue12m");
-
   const employee = finiteNonNegative(input.employeeAndAvulsoRemuneration12m, "employeeAndAvulsoRemuneration12m");
   const individual = finiteNonNegative(input.individualContributorRemuneration12m, "individualContributorRemuneration12m");
   const thirteenth = finiteNonNegative(input.thirteenthSalary12m, "thirteenthSalary12m");
@@ -411,13 +431,32 @@ export function calculateFatorR(input: FatorRInput, rule: FatorRRuleParameters, 
       !Number.isInteger(periodMonths) || periodMonths < 1) {
     throw new Error("invalid Fator R rule parameters");
   }
+  if (rule.ratio !== "FS12/RBT12") throw new Error("unsupported Fator R ratio rule");
+  if (!rule.selection || rule.selection.greater_or_equal_threshold !== "III" || rule.selection.below_threshold !== "V") {
+    throw new Error("invalid Fator R annex selection rule");
+  }
 
   const fs12 = employee + individual + thirteenth + cpp + fgts;
   let factorNumerator = fs12;
   let factorDenominator = revenue12m;
   let factorBasis: "FS12_RBT12" | "FSPA_RPA" | "startup_prior_months" | "startup_fixed_rule" = "FS12_RBT12";
+  let monthsUsed: FatorRHistoryMonth[] = [];
+  let windowStart: string | null = null;
+  let windowEnd: string | null = null;
+
+  const monthKey = (year: number, month: number) => year * 12 + (month - 1);
+  const periodKey = monthKey(periodContext.periodYear, periodContext.periodMonth);
+  if (!Number.isInteger(periodContext.periodYear) || periodContext.periodYear < 2000 ||
+      !Number.isInteger(periodContext.periodMonth) || periodContext.periodMonth < 1 || periodContext.periodMonth > 12) {
+    throw new Error("invalid Fator R period");
+  }
 
   if (periodContext.mode === "opening_month") {
+    if (!Number.isInteger(periodContext.openingYear) || periodContext.openingYear < 2000 ||
+        !Number.isInteger(periodContext.openingMonth) || periodContext.openingMonth < 1 || periodContext.openingMonth > 12 ||
+        periodContext.periodYear !== periodContext.openingYear || periodContext.periodMonth !== periodContext.openingMonth) {
+      throw new Error("opening month context does not match the calculation period");
+    }
     const fspa = finiteNonNegative(periodContext.fspa, "fspa");
     const rpa = finiteNonNegative(periodContext.rpa, "rpa");
     const startupFixedMonths = Number(rule.startup_fixed_months ?? 0);
@@ -438,12 +477,18 @@ export function calculateFatorR(input: FatorRInput, rule: FatorRRuleParameters, 
       factorBasis = "FSPA_RPA";
     }
   } else if (periodContext.mode === "startup") {
-    if (!Array.isArray(periodContext.priorMonths)) throw new Error("priorMonths must be an array");
+    if (!Number.isInteger(periodContext.openingYear) || periodContext.openingYear < 2000 ||
+        !Number.isInteger(periodContext.openingMonth) || periodContext.openingMonth < 1 || periodContext.openingMonth > 12) {
+      throw new Error("invalid Fator R opening period");
+    }
+    const openingKey = monthKey(periodContext.openingYear, periodContext.openingMonth);
+    if (periodKey <= openingKey) throw new Error("startup period must be after the opening month");
+
     const startupFixedMonths = Number(rule.startup_fixed_months ?? 0);
     if (!Number.isInteger(startupFixedMonths) || startupFixedMonths < 0) {
       throw new Error("invalid Fator R startup rule parameters");
     }
-    if (startupFixedMonths >= 2) {
+    if (startupFixedMonths >= 2 && periodKey <= openingKey + startupFixedMonths - 1) {
       const startupFixedFactor = Number(rule.startup_fixed_factor);
       if (!Number.isFinite(startupFixedFactor) || startupFixedFactor < 0 || startupFixedFactor > 1) {
         throw new Error("Fator R startup_fixed_factor is unavailable or invalid");
@@ -452,10 +497,45 @@ export function calculateFatorR(input: FatorRInput, rule: FatorRRuleParameters, 
       factorDenominator = 1;
       factorBasis = "startup_fixed_rule";
     } else {
-      factorNumerator = periodContext.priorMonths.reduce((sum, item) => sum + finiteNonNegative(item.fs, "prior month fs"), 0);
-      factorDenominator = periodContext.priorMonths.reduce((sum, item) => sum + finiteNonNegative(item.revenue, "prior month revenue"), 0);
+      if (!Array.isArray(periodContext.priorMonths)) throw new Error("priorMonths must be an array");
+      const expectedStart = Math.max(openingKey, periodKey - periodMonths);
+      const expectedKeys: number[] = [];
+      for (let key = expectedStart; key < periodKey; key++) expectedKeys.push(key);
+      const byKey = new Map<number, FatorRHistoryMonth>();
+
+      for (const item of periodContext.priorMonths) {
+        if (!Number.isInteger(item.year) || item.year < 2000 ||
+            !Number.isInteger(item.month) || item.month < 1 || item.month > 12) {
+          throw new Error("invalid Fator R history month");
+        }
+        const key = monthKey(item.year, item.month);
+        if (key >= periodKey) throw new Error("Fator R history cannot contain the calculation period or a future month");
+        if (key < openingKey) throw new Error("Fator R history cannot precede the opening month");
+        if (byKey.has(key)) throw new Error("duplicate Fator R history month");
+        byKey.set(key, {
+          year: item.year,
+          month: item.month,
+          fs: finiteNonNegative(item.fs, "history fs"),
+          revenue: finiteNonNegative(item.revenue, "history revenue"),
+          regime: item.regime,
+          origin: item.origin
+        });
+      }
+
+      if (byKey.size !== expectedKeys.length || expectedKeys.some((key) => !byKey.has(key))) {
+        throw new Error("Fator R history must contain every month in the applicable window");
+      }
+
+      monthsUsed = expectedKeys.map((key) => byKey.get(key)!);
+      factorNumerator = monthsUsed.reduce((sum, item) => sum + item.fs, 0);
+      factorDenominator = monthsUsed.reduce((sum, item) => sum + item.revenue, 0);
       factorBasis = "startup_prior_months";
+      windowStart = `${monthsUsed[0].year}-${String(monthsUsed[0].month).padStart(2, "0")}`;
+      windowEnd = `${monthsUsed[monthsUsed.length - 1].year}-${String(monthsUsed[monthsUsed.length - 1].month).padStart(2, "0")}`;
     }
+  } else {
+    windowStart = `${periodContext.periodYear}-${String(periodContext.periodMonth).padStart(2, "0")}`;
+    windowEnd = windowStart;
   }
 
   const zeroBothFactor = Number(rule?.zero_both_factor);
@@ -480,6 +560,7 @@ export function calculateFatorR(input: FatorRInput, rule: FatorRRuleParameters, 
     factorR = factorNumerator / factorDenominator;
     thresholdComparison = factorR >= threshold ? "greater_or_equal" : "below";
   }
+
   const effectiveAnnex = thresholdComparison === "greater_or_equal"
     ? rule.selection.greater_or_equal_threshold
     : rule.selection.below_threshold;
@@ -494,6 +575,10 @@ export function calculateFatorR(input: FatorRInput, rule: FatorRRuleParameters, 
     threshold,
     thresholdComparison,
     effectiveAnnex,
+    period: { year: periodContext.periodYear, month: periodContext.periodMonth },
+    windowStart,
+    windowEnd,
+    monthsUsed,
     inputs: {
       employeeAndAvulsoRemuneration12m: employee,
       individualContributorRemuneration12m: individual,
@@ -502,6 +587,6 @@ export function calculateFatorR(input: FatorRInput, rule: FatorRRuleParameters, 
       fgts12m: fgts
     },
     periodMonths,
-    note: "Fator R calculado pela razão FS12/RBT12 com os componentes informados. A atividade deve estar entre as hipóteses legais sujeitas ao Fator R para a resolução III/V ser aplicável."
+    note: "Fator R calculado pela razão FS12/RBT12 com janela histórica explícita. Para 2027, os 2 primeiros meses de início de atividades usam o fator fixado pela regra versionada; depois, a janela deve conter todos os meses aplicáveis. A atividade deve estar entre as hipóteses legais sujeitas ao Fator R para a resolução III/V ser aplicável."
   };
 }
