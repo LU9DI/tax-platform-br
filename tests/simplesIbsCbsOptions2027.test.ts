@@ -5,7 +5,7 @@ import { resolveSimplesNationalIbsCbsOption, resolveSimplesNationalIbsCbsStartOf
 const RULE = {
   models: ["simples_puro","simples_hibrido"] as ["simples_puro","simples_hibrido"],
   first_semester:{start:"2027-01-01",end:"2027-06-30",option_window:{start:"2026-09-01",end:"2026-10-30"},cancellation_window:{start:"2026-11-03",end:"2026-12-20"},cancellation_deadline:"2026-12-20"},
-    second_semester:{start:"2027-07-01",end:"2027-12-31",option_window:{start:"2027-03-01",end:"2027-03-31"},renunciation_window:{start:"2027-03-01",end:"2027-03-31"},cancellation_deadline:null},
+    second_semester:{start:"2027-07-01",end:"2027-12-31",option_window:{start:"2027-03-01",end:"2027-03-31"},cancellation_window:{start:"2027-03-01",end:"2027-05-31"},renunciation_window:{start:"2027-03-01",end:"2027-03-31"},cancellation_deadline:"2027-05-31"},
   regular_ibs_cbs_rates:null
 };
 
