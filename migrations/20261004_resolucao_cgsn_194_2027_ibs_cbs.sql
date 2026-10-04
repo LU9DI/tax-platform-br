@@ -48,3 +48,9 @@ ON CONFLICT (id) DO UPDATE SET
 
 ALTER TABLE tax_company_ibs_cbs_option_events
   ADD COLUMN IF NOT EXISTS cancellation_window_start DATE;
+
+ALTER TABLE tax_company_ibs_cbs_option_events
+  ADD COLUMN IF NOT EXISTS renunciation_window_start DATE;
+
+ALTER TABLE tax_company_ibs_cbs_option_events
+  ADD COLUMN IF NOT EXISTS renunciation_window_end DATE;
