@@ -4,7 +4,7 @@ import type { SimplesNationalIbsCbsOptionRule } from "./taxService.js";
 
 type EventType = "elected" | "cancelled";
 
-function dateOnly(value:string){if(!/^\\d{4}-\\d{2}-\\d{2}$/.test(value))throw new Error("invalid date");const d=new Date(value+"T00:00:00Z");if(Number.isNaN(d.getTime())||d.toISOString().slice(0,10)!==value)throw new Error("invalid date");return d;}
+function dateOnly(value:string){if(!/^\d{4}-\d{2}-\d{2}$/.test(value))throw new Error("invalid date");const d=new Date(value+"T00:00:00Z");if(Number.isNaN(d.getTime())||d.toISOString().slice(0,10)!==value)throw new Error("invalid date");return d;}
 
 function semesterDates(rule:SimplesNationalIbsCbsOptionRule,period:string){
  const d=dateOnly(period);
@@ -40,10 +40,15 @@ export async function recordIbsCbsOptionEvent(input:{companyId:string;eventType:
  const {effectiveFrom,effectiveTo,window,cancellationDeadline}=semesterDates(rule,input.period);
  const now=input.now??new Date();
  const windowStart=dateOnly(window.start),windowEnd=dateOnly(window.end),deadline=dateOnly(cancellationDeadline);
- if(now<windowStart||now>deadline)throw new Error("IBS/CBS option event is outside the applicable option/cancellation window");
+ const cancellationWindow=(rule as any).cancellation_window ?? {start:window.start,end:cancellationDeadline};
+ const cancellationStart=dateOnly(cancellationWindow.start),cancellationEnd=dateOnly(cancellationWindow.end);
+ if(input.eventType==="elected"){
+   if(now<windowStart||now>windowEnd)throw new Error("IBS/CBS election window has closed");
+ } else {
+   if(now<cancellationStart||now>cancellationEnd)throw new Error("IBS/CBS cancellation window is closed");
+ }
  if(input.eventType==="cancelled" && now>deadline)throw new Error("IBS/CBS cancellation deadline has passed");
- if(input.eventType==="elected" && now>windowEnd)throw new Error("IBS/CBS election window has closed");
  const id=randomUUID();
- await db.query("INSERT INTO tax_company_ibs_cbs_option_events (id,company_id,event_type,model,effective_from,effective_to,option_window_start,option_window_end,cancellation_deadline,rule_version_id) VALUES ($1,$2,$3,'simples_hibrido',$4,$5,$6,$7,$8,$9) ON CONFLICT (company_id,effective_from,effective_to,event_type) DO NOTHING",[id,input.companyId,input.eventType,effectiveFrom,effectiveTo,window.start,window.end,cancellationDeadline,input.ruleVersionId]);
+ await db.query("INSERT INTO tax_company_ibs_cbs_option_events (id,company_id,event_type,model,effective_from,effective_to,option_window_start,option_window_end,cancellation_window_start,cancellation_deadline,rule_version_id) VALUES ($1,$2,$3,'simples_hibrido',$4,$5,$6,$7,$8,$9,$10) ON CONFLICT (company_id,effective_from,effective_to,event_type) DO NOTHING",[id,input.companyId,input.eventType,effectiveFrom,effectiveTo,window.start,window.end,cancellationWindow.start,cancellationDeadline,input.ruleVersionId]);
  return id;
 }
