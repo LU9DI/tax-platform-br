@@ -230,3 +230,39 @@ test(
     }
   },
 );
+
+
+test(
+  "IBS/CBS option event persistence is idempotent and returns the persisted event id",
+  { skip: !databaseUrl },
+  async () => {
+    const pool = new pg.Pool({ connectionString: databaseUrl });
+    try {
+      const seed = await pool.query("SELECT id FROM tax_companies LIMIT 1");
+      assert.equal(seed.rowCount, 1);
+      const companyId = seed.rows[0].id as string;
+      const ruleResult = await pool.query("SELECT id FROM tax_rules WHERE code='SIMPLES_NACIONAL_IBS_CBS_OPTIONS_2027' AND active=true ORDER BY version DESC LIMIT 1");
+      assert.equal(ruleResult.rowCount, 1);
+      const ruleVersionId = ruleResult.rows[0].id as string;
+      await pool.query("DELETE FROM tax_company_ibs_cbs_option_events WHERE company_id=$1", [companyId]);
+
+      const firstId = await recordIbsCbsOptionEvent({
+        companyId, eventType: "elected", period: "2027-01-15", ruleVersionId,
+        now: new Date("2026-09-15T12:00:00Z"),
+      });
+      const secondId = await recordIbsCbsOptionEvent({
+        companyId, eventType: "elected", period: "2027-01-15", ruleVersionId,
+        now: new Date("2026-09-15T12:00:00Z"),
+      });
+
+      assert.equal(secondId, firstId);
+      const count = await pool.query(
+        "SELECT count(*)::int AS count FROM tax_company_ibs_cbs_option_events WHERE company_id=$1 AND effective_from='2027-01-01' AND effective_to='2027-06-30' AND event_type='elected'",
+        [companyId],
+      );
+      assert.equal(count.rows[0].count, 1);
+    } finally {
+      await pool.end();
+    }
+  },
+);
