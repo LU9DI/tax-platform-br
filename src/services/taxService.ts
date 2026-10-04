@@ -168,8 +168,8 @@ export const calculateSimplesNationalAnexoII = (input: {
 
 export type SimplesNationalIbsCbsOptionRule = {
   models: readonly ["simples_puro","simples_hibrido"];
-  first_semester: { start: string; end: string; option_window: { start: string; end: string }; cancellation_deadline: string };
-  second_semester: { start: string; end: string; option_window: { start: string; end: string }; cancellation_deadline: string };
+  first_semester: { start: string; end: string; option_window: { start: string; end: string }; cancellation_window?: { start: string; end: string }; cancellation_deadline: string };
+  second_semester: { start: string; end: string; option_window: { start: string; end: string }; cancellation_window?: { start: string; end: string }; cancellation_deadline: string };
   regular_ibs_cbs_rates: null;
 };
 
