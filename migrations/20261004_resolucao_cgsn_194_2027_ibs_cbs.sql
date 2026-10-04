@@ -21,10 +21,17 @@ VALUES
     "cancellation_window":{"start":"2026-11-03","end":"2026-12-20"},
     "cancellation_deadline":"2026-12-20"
   },
+  "second_semester":{
+    "start":"2027-07-01",
+    "end":"2027-12-31",
+    "option_window":{"start":"2027-03-01","end":"2027-03-31"},
+    "renunciation_window":{"start":"2027-03-01","end":"2027-03-31"},
+    "cancellation_deadline":null
+  },
   "regular_ibs_cbs_rates":null,
   "normative_update":"Resolução CGSN nº 194/2026",
   "published_at":"2026-09-28",
-  "note":"Do not calculate IBS/CBS regular rates from this rule; resolve the applicable normative tax rule separately."
+  "note":"The CGSN 194 update governs the Jan-Jun 2027 choice and the 2026 deadlines; the Jul-Dec framework is retained from the prior normative versions and must not be inferred from CGSN 194 alone."
 }'::jsonb,
 '2026-09-28','2027-12-31',true)
 ON CONFLICT (id) DO UPDATE SET
