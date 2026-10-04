@@ -21,13 +21,6 @@ VALUES
     "cancellation_window":{"start":"2026-11-03","end":"2026-12-20"},
     "cancellation_deadline":"2026-12-20"
   },
-  "second_semester":{
-    "start":"2027-07-01",
-    "end":"2027-12-31",
-    "option_window":{"start":"2027-03-01","end":"2027-03-31"},
-    "cancellation_window":{"start":"2026-11-03","end":"2026-12-20"},
-    "cancellation_deadline":"2026-12-20"
-  },
   "regular_ibs_cbs_rates":null,
   "normative_update":"Resolução CGSN nº 194/2026",
   "published_at":"2026-09-28",
@@ -48,7 +41,3 @@ ON CONFLICT (id) DO UPDATE SET
 
 ALTER TABLE tax_company_ibs_cbs_option_events
   ADD COLUMN IF NOT EXISTS cancellation_window_start DATE;
-
-UPDATE tax_company_ibs_cbs_option_events
-SET cancellation_window_start = cancellation_deadline
-WHERE cancellation_window_start IS NULL;
