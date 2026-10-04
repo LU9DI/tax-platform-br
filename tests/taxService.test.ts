@@ -50,3 +50,96 @@ test("rule evidence stays bound to the resolved version when validity dates chan
   }, ruleX), true);
   assert.equal(ruleEvidenceMatches(evidenceFromY, ruleX), false);
 });
+
+
+import { calculateFatorR, FatorRRuleParameters } from "../src/services/taxService.js";
+
+const FATOR_R_RULE: FatorRRuleParameters = {
+  threshold: 0.28,
+  period_months: 12,
+  ratio: "FS12/RBT12",
+  fs12: { includes: [], excludes_examples: [] },
+  rbt12: { basis: "versioned" },
+  selection: { greater_or_equal_threshold: "III", below_threshold: "V" },
+  zero_both_factor: 0.01,
+  zero_revenue_factor: 0.28,
+  zero_fs_factor: 0.01,
+};
+
+const FACTOR_INPUT = {
+  revenue12m: 0,
+  employeeAndAvulsoRemuneration12m: 0,
+  individualContributorRemuneration12m: 0,
+  thirteenthSalary12m: 0,
+  employerSocialSecurityContribution12m: 0,
+  fgts12m: 0,
+};
+
+test("Fator R uses the explicit FS12/RBT12 ratio", () => {
+  const r = calculateFatorR({
+    ...FACTOR_INPUT,
+    revenue12m: 100000,
+    employeeAndAvulsoRemuneration12m: 10000,
+    individualContributorRemuneration12m: 10000,
+  }, FATOR_R_RULE, { mode: "established", periodYear: 2026, periodMonth: 10 });
+  assert.equal(r.factorR, 0.2);
+  assert.equal(r.effectiveAnnex, "V");
+});
+
+test("2027 first two startup months use the versioned fixed factor", () => {
+  const rule = { ...FATOR_R_RULE, startup_fixed_months: 2, startup_fixed_factor: 0.28 };
+  const r = calculateFatorR(FACTOR_INPUT, rule, {
+    mode: "startup", periodYear: 2027, periodMonth: 2,
+    openingYear: 2027, openingMonth: 1, priorMonths: []
+  });
+  assert.equal(r.factorR, 0.28);
+  assert.equal(r.effectiveAnnex, "III");
+});
+
+test("startup third month requires a complete contiguous history from opening through prior month", () => {
+  const rule = { ...FATOR_R_RULE, startup_fixed_months: 2, startup_fixed_factor: 0.28 };
+  const r = calculateFatorR(FACTOR_INPUT, rule, {
+    mode: "startup", periodYear: 2027, periodMonth: 3,
+    openingYear: 2027, openingMonth: 1,
+    priorMonths: [
+      { year: 2027, month: 1, fs: 100, revenue: 1000, regime: "mei", origin: "historical" },
+      { year: 2027, month: 2, fs: 100, revenue: 1000, regime: "simples_nacional", origin: "historical" },
+    ]
+  });
+  assert.equal(r.factorNumerator, 200);
+  assert.equal(r.factorDenominator, 2000);
+  assert.equal(r.factorR, 0.1);
+  assert.equal(r.windowStart, "2027-01");
+  assert.equal(r.windowEnd, "2027-02");
+  assert.equal(r.monthsUsed.length, 2);
+});
+
+test("startup history rejects duplicate and missing months", () => {
+  const rule = { ...FATOR_R_RULE, startup_fixed_months: 2, startup_fixed_factor: 0.28 };
+  const base = { mode: "startup" as const, periodYear: 2027, periodMonth: 4, openingYear: 2027, openingMonth: 1 };
+  assert.throws(() => calculateFatorR(FACTOR_INPUT, rule, { ...base, priorMonths: [
+    { year: 2027, month: 1, fs: 0, revenue: 1 },
+    { year: 2027, month: 2, fs: 0, revenue: 1 },
+    { year: 2027, month: 2, fs: 0, revenue: 1 },
+  ] }), /duplicate/);
+  assert.throws(() => calculateFatorR(FACTOR_INPUT, rule, { ...base, priorMonths: [
+    { year: 2027, month: 1, fs: 0, revenue: 1 },
+    { year: 2027, month: 3, fs: 0, revenue: 1 },
+  ] }), /every month/);
+});
+
+test("zero payroll with positive revenue resolves to 0.01", () => {
+  const r = calculateFatorR({ ...FACTOR_INPUT, revenue12m: 1000 }, FATOR_R_RULE, {
+    mode: "established", periodYear: 2026, periodMonth: 10
+  });
+  assert.equal(r.factorR, 0.01);
+  assert.equal(r.effectiveAnnex, "V");
+});
+
+test("threshold exactly 0.28 selects Annex III", () => {
+  const r = calculateFatorR({
+    ...FACTOR_INPUT, revenue12m: 1000, employeeAndAvulsoRemuneration12m: 280
+  }, FATOR_R_RULE, { mode: "established", periodYear: 2026, periodMonth: 10 });
+  assert.equal(r.factorR, 0.28);
+  assert.equal(r.effectiveAnnex, "III");
+});
