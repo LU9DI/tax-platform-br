@@ -57,7 +57,9 @@ export async function recordIbsCbsOptionEvent(input:{companyId:string;eventType:
    if(!cancellationStart||!cancellationEnd||now<cancellationStart||now>cancellationEnd)throw new Error("IBS/CBS cancellation window is closed");
    if(deadline && now>deadline)throw new Error("IBS/CBS cancellation deadline has passed");
  } else {
-   if(!renunciationWindow)throw new Error("IBS/CBS renunciation window is not available");
+   if(semester!=="second" || !renunciationWindow)throw new Error("IBS/CBS renunciation window is not available");
+   const prior=await db.query("SELECT event_type FROM tax_company_ibs_cbs_option_events WHERE company_id=$1 AND effective_from=$2 AND effective_to=$3 ORDER BY occurred_at DESC LIMIT 1",[input.companyId,"2027-01-01","2027-06-30"]);
+   if(prior.rows[0]?.event_type!=="elected")throw new Error("IBS/CBS renunciation requires an active first-semester hybrid option");
    const renunciationStart=dateOnly(renunciationWindow.start),renunciationEnd=dateOnly(renunciationWindow.end);
    if(now<renunciationStart||now>renunciationEnd)throw new Error("IBS/CBS renunciation window is closed");
  }
