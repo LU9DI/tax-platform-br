@@ -161,3 +161,32 @@ test(
     }
   },
 );
+
+
+test(
+  "IBS/CBS second-semester election is allowed when there was no first-semester election",
+  { skip: !databaseUrl },
+  async () => {
+    const pool = new pg.Pool({ connectionString: databaseUrl });
+    try {
+      const seed = await pool.query("SELECT id FROM tax_companies LIMIT 1");
+      assert.equal(seed.rowCount, 1);
+      const companyId = seed.rows[0].id as string;
+      const ruleResult = await pool.query("SELECT id, parameters FROM tax_rules WHERE code='SIMPLES_NACIONAL_IBS_CBS_OPTIONS_2027' AND active=true ORDER BY version DESC LIMIT 1");
+      assert.equal(ruleResult.rowCount, 1);
+      const rule = ruleResult.rows[0].parameters;
+      const ruleVersionId = ruleResult.rows[0].id as string;
+      await pool.query("DELETE FROM tax_company_ibs_cbs_option_events WHERE company_id=$1", [companyId]);
+
+      await recordIbsCbsOptionEvent({
+        companyId, eventType: "elected", period: "2027-07-15", ruleVersionId,
+        now: new Date("2027-03-15T12:00:00Z"),
+      });
+      const state = await getEffectiveIbsCbsOption(companyId, "2027-07-15", rule);
+      assert.equal(state.model, "simples_hibrido");
+      assert.equal(state.previousSemesterModel, undefined);
+    } finally {
+      await pool.end();
+    }
+  },
+);
