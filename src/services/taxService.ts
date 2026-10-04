@@ -179,7 +179,7 @@ export function resolveSimplesNationalIbsCbsOption(input: {
   previousSemesterModel?: "simples_puro" | "simples_hibrido";
   rule: SimplesNationalIbsCbsOptionRule;
 }) {
-  if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(input.period)) throw new Error("invalid period");
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(input.period)) throw new Error("invalid period");
   const period = new Date(input.period + "T00:00:00Z");
   if (Number.isNaN(period.getTime()) || period.toISOString().slice(0, 10) !== input.period) throw new Error("invalid period");
   const rule = input.rule;
