@@ -175,10 +175,16 @@ export type SimplesNationalIbsCbsOptionRule = {
 };
 
 export type SimplesNationalIbsCbsStartOfActivityRule = {
+  simples_nacional_cnpj_registration_window?: { start: string; end: string };
   ibs_cbs_cnpj_registration_window: { start: string; end: string };
   option_at_cnpj_registration: true;
   ibs_cbs_effective_window: { start: string; end: string };
   effect_basis: "cnpj_registration_for_ibs_cbs";
+};
+
+export type SimplesNationalStartOfActivityRule = {
+  simples_nacional_cnpj_registration_window: { start: string; end: string };
+  option_at_cnpj_registration: true;
 };
 
 function validIsoDate(value: string, name: string) {
@@ -186,6 +192,51 @@ function validIsoDate(value: string, name: string) {
   const d = new Date(value + "T00:00:00Z");
   if (Number.isNaN(d.getTime()) || d.toISOString().slice(0, 10) !== value) throw new Error(`invalid ${name}`);
   return d;
+}
+
+export function resolveSimplesNationalStartOfActivityOption(input: {
+  cnpjRegistrationDate: string;
+  period: string;
+  rule: SimplesNationalIbsCbsOptionRule;
+  startOfActivityRule?: SimplesNationalStartOfActivityRule;
+}) {
+  const registration = validIsoDate(input.cnpjRegistrationDate, "cnpjRegistrationDate");
+  const period = validIsoDate(input.period, "period");
+  const special = input.startOfActivityRule ?? input.rule.start_of_activity;
+  if (!special || !special.simples_nacional_cnpj_registration_window) {
+    throw new Error("Simples Nacional start-of-activity rule is unavailable");
+  }
+  const registrationStart = validIsoDate(
+    special.simples_nacional_cnpj_registration_window.start,
+    "Simples Nacional start-of-activity registration window start"
+  );
+  const registrationEnd = validIsoDate(
+    special.simples_nacional_cnpj_registration_window.end,
+    "Simples Nacional start-of-activity registration window end"
+  );
+  if (special.option_at_cnpj_registration !== true) {
+    throw new Error("invalid Simples Nacional start-of-activity rule");
+  }
+  if (registration < registrationStart || registration > registrationEnd) {
+    throw new Error("CNPJ registration is outside the 2027 Simples Nacional start-of-activity exception");
+  }
+  if (period < validIsoDate("2027-01-01", "Simples Nacional 2027 effect start") ||
+      period > validIsoDate("2027-12-31", "Simples Nacional 2027 effect end")) {
+    throw new Error("period is outside the 2027 Simples Nacional start-of-activity effect window");
+  }
+  return {
+    year: 2027,
+    optionAtCnpjRegistration: true as const,
+    decisionSource: "start_of_activity_cnpj_registration" as const,
+    cnpjRegistrationDate: input.cnpjRegistrationDate,
+    optionWindow: {
+      start: input.cnpjRegistrationDate,
+      end: input.cnpjRegistrationDate
+    },
+    effectStart: "2027-01-01",
+    effectEnd: "2027-12-31",
+    note: "Simples Nacional option for start-of-activity companies is resolved from the CNPJ registration exception window; the general 2027 option window is not used for covered registrations."
+  };
 }
 
 export function resolveSimplesNationalIbsCbsStartOfActivityOption(input: {
