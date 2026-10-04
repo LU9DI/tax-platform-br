@@ -34,7 +34,17 @@ VALUES
   "note":"Do not calculate IBS/CBS regular rates from this rule; resolve the applicable normative tax rule separately."
 }'::jsonb,
 '2026-09-28','2027-12-31',true)
-ON CONFLICT (tax_year,code,version) DO NOTHING;
+ON CONFLICT (id) DO UPDATE SET
+  tax_year=EXCLUDED.tax_year,
+  code=EXCLUDED.code,
+  name=EXCLUDED.name,
+  version=EXCLUDED.version,
+  source_url=EXCLUDED.source_url,
+  source_reference=EXCLUDED.source_reference,
+  parameters=EXCLUDED.parameters,
+  effective_from=EXCLUDED.effective_from,
+  effective_to=EXCLUDED.effective_to,
+  active=EXCLUDED.active;
 
 ALTER TABLE tax_company_ibs_cbs_option_events
   ADD COLUMN IF NOT EXISTS cancellation_window_start DATE;
