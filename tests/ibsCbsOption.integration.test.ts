@@ -293,3 +293,51 @@ test(
     }
   },
 );
+
+
+test(
+  "IBS/CBS second-semester election or renunciation can be cancelled through 31 May 2027",
+  { skip: !databaseUrl },
+  async () => {
+    const pool = new pg.Pool({ connectionString: databaseUrl });
+    try {
+      const seed = await pool.query("SELECT id FROM tax_companies LIMIT 1");
+      assert.equal(seed.rowCount, 1);
+      const companyId = seed.rows[0].id as string;
+      const ruleResult = await pool.query("SELECT id, parameters FROM tax_rules WHERE code='SIMPLES_NACIONAL_IBS_CBS_OPTIONS_2027' AND active=true ORDER BY version DESC LIMIT 1");
+      assert.equal(ruleResult.rowCount, 1);
+      const rule = ruleResult.rows[0].parameters;
+      const ruleVersionId = ruleResult.rows[0].id as string;
+      await pool.query("DELETE FROM tax_company_ibs_cbs_option_events WHERE company_id=$1", [companyId]);
+
+      await recordIbsCbsOptionEvent({
+        companyId, eventType: "elected", period: "2027-07-15", ruleVersionId,
+        now: new Date("2027-03-15T12:00:00Z"),
+      });
+      await recordIbsCbsOptionEvent({
+        companyId, eventType: "cancelled", period: "2027-07-15", ruleVersionId,
+        now: new Date("2027-05-31T12:00:00Z"),
+      });
+      const cancelledElection = await getEffectiveIbsCbsOption(companyId, "2027-07-15", rule);
+      assert.equal(cancelledElection.model, "simples_puro");
+
+      await pool.query("DELETE FROM tax_company_ibs_cbs_option_events WHERE company_id=$1", [companyId]);
+      await recordIbsCbsOptionEvent({
+        companyId, eventType: "elected", period: "2027-01-15", ruleVersionId,
+        now: new Date("2026-09-15T12:00:00Z"),
+      });
+      await recordIbsCbsOptionEvent({
+        companyId, eventType: "renounced", period: "2027-07-15", ruleVersionId,
+        now: new Date("2027-03-15T12:00:00Z"),
+      });
+      await recordIbsCbsOptionEvent({
+        companyId, eventType: "cancelled", period: "2027-07-15", ruleVersionId,
+        now: new Date("2027-05-31T12:00:00Z"),
+      });
+      const cancelledRenunciation = await getEffectiveIbsCbsOption(companyId, "2027-07-15", rule);
+      assert.equal(cancelledRenunciation.model, "simples_hibrido");
+    } finally {
+      await pool.end();
+    }
+  },
+);
