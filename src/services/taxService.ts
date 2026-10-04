@@ -170,6 +170,7 @@ export type SimplesNationalIbsCbsOptionRule = {
   models: readonly ["simples_puro","simples_hibrido"];
   first_semester: { start: string; end: string; option_window: { start: string; end: string }; cancellation_window?: { start: string; end: string }; cancellation_deadline?: string | null; renunciation_window?: { start: string; end: string } };
   second_semester?: { start: string; end: string; option_window: { start: string; end: string }; cancellation_window?: { start: string; end: string }; cancellation_deadline?: string | null; renunciation_window?: { start: string; end: string } };
+  start_of_activity?: SimplesNationalIbsCbsStartOfActivityRule;
   regular_ibs_cbs_rates: null;
 };
 
@@ -192,11 +193,12 @@ export function resolveSimplesNationalIbsCbsStartOfActivityOption(input: {
   period: string;
   optionModel?: "simples_puro" | "simples_hibrido";
   rule: SimplesNationalIbsCbsOptionRule;
-  startOfActivityRule: SimplesNationalIbsCbsStartOfActivityRule;
+  startOfActivityRule?: SimplesNationalIbsCbsStartOfActivityRule;
 }) {
   const registration = validIsoDate(input.cnpjRegistrationDate, "cnpjRegistrationDate");
   const period = validIsoDate(input.period, "period");
-  const special = input.startOfActivityRule;
+  const special = input.startOfActivityRule ?? input.rule.start_of_activity;
+  if (!special) throw new Error("start-of-activity rule is unavailable");
   const registrationStart = validIsoDate(special.cnpj_registration_window.start, "start-of-activity registration window start");
   const registrationEnd = validIsoDate(special.cnpj_registration_window.end, "start-of-activity registration window end");
   const effectStart = validIsoDate(special.ibs_cbs_effective_window.start, "IBS/CBS effect window start");
