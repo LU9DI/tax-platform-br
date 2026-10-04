@@ -107,11 +107,22 @@ export function calculateSimplesNationalBracketed(input: {
 }, rule: SimplesNationalRuleParameters) {
   const revenue12m = finiteNonNegative(input.revenue12m, "revenue12m");
   const monthlyRevenue = finiteNonNegative(input.monthlyRevenue, "monthlyRevenue");
-  if (!Array.isArray(rule?.brackets) || rule.brackets.length !== 6) {
+  if (!Array.isArray(rule?.brackets) || rule.brackets.length === 0) {
     throw new Error("invalid Simples Nacional bracket rule parameters");
   }
+  let previousMaxRevenue = -Infinity;
+  for (const item of rule.brackets) {
+    const maxRevenue = Number(item?.max_revenue_12m);
+    const rate = Number(item?.nominal_rate);
+    const deduction = Number(item?.deduction);
+    if (!Number.isFinite(maxRevenue) || maxRevenue <= previousMaxRevenue ||
+        !Number.isFinite(rate) || rate < 0 || rate > 1 ||
+        !Number.isFinite(deduction) || deduction < 0) {
+      throw new Error("invalid Simples Nacional bracket parameters");
+    }
+    previousMaxRevenue = maxRevenue;
+  }
   const bracket = rule.brackets.find((item) =>
-    Number.isFinite(item.max_revenue_12m) &&
     revenue12m <= item.max_revenue_12m
   );
   if (!bracket) throw new Error("revenue12m exceeds Simples Nacional limit");
@@ -396,7 +407,8 @@ export function calculateFatorR(input: FatorRInput, rule: FatorRRuleParameters, 
 
   const threshold = Number(rule?.threshold);
   const periodMonths = Number(rule?.period_months);
-  if (!Number.isFinite(threshold) || threshold < 0 || threshold > 1 || periodMonths !== 12) {
+  if (!Number.isFinite(threshold) || threshold < 0 || threshold > 1 ||
+      !Number.isInteger(periodMonths) || periodMonths < 1) {
     throw new Error("invalid Fator R rule parameters");
   }
 
@@ -408,8 +420,16 @@ export function calculateFatorR(input: FatorRInput, rule: FatorRRuleParameters, 
   if (periodContext.mode === "opening_month") {
     const fspa = finiteNonNegative(periodContext.fspa, "fspa");
     const rpa = finiteNonNegative(periodContext.rpa, "rpa");
-    if (Number(rule.startup_fixed_months) >= 1) {
-      factorNumerator = Number(rule.startup_fixed_factor ?? threshold);
+    const startupFixedMonths = Number(rule.startup_fixed_months ?? 0);
+    if (!Number.isInteger(startupFixedMonths) || startupFixedMonths < 0) {
+      throw new Error("invalid Fator R startup rule parameters");
+    }
+    if (startupFixedMonths >= 1) {
+      const startupFixedFactor = Number(rule.startup_fixed_factor);
+      if (!Number.isFinite(startupFixedFactor) || startupFixedFactor < 0 || startupFixedFactor > 1) {
+        throw new Error("Fator R startup_fixed_factor is unavailable or invalid");
+      }
+      factorNumerator = startupFixedFactor;
       factorDenominator = 1;
       factorBasis = "startup_fixed_rule";
     } else {
@@ -419,8 +439,16 @@ export function calculateFatorR(input: FatorRInput, rule: FatorRRuleParameters, 
     }
   } else if (periodContext.mode === "startup") {
     if (!Array.isArray(periodContext.priorMonths)) throw new Error("priorMonths must be an array");
-    if (Number(rule.startup_fixed_months) >= 2) {
-      factorNumerator = Number(rule.startup_fixed_factor ?? threshold);
+    const startupFixedMonths = Number(rule.startup_fixed_months ?? 0);
+    if (!Number.isInteger(startupFixedMonths) || startupFixedMonths < 0) {
+      throw new Error("invalid Fator R startup rule parameters");
+    }
+    if (startupFixedMonths >= 2) {
+      const startupFixedFactor = Number(rule.startup_fixed_factor);
+      if (!Number.isFinite(startupFixedFactor) || startupFixedFactor < 0 || startupFixedFactor > 1) {
+        throw new Error("Fator R startup_fixed_factor is unavailable or invalid");
+      }
+      factorNumerator = startupFixedFactor;
       factorDenominator = 1;
       factorBasis = "startup_fixed_rule";
     } else {
