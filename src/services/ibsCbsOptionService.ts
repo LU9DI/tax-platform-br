@@ -37,8 +37,12 @@ export async function recordIbsCbsOptionEvent(input:{companyId:string;eventType:
  const ruleResult=await db.query("SELECT parameters FROM tax_rules WHERE id=$1 AND code='SIMPLES_NACIONAL_IBS_CBS_OPTIONS_2027'",[input.ruleVersionId]);
  if(!ruleResult.rowCount)throw new Error("IBS/CBS option rule not found");
  const rule=ruleResult.rows[0].parameters as SimplesNationalIbsCbsOptionRule;
- const {effectiveFrom,effectiveTo,window,cancellationDeadline,renunciationWindow}=semesterDates(rule,input.period);
+ const {semester,effectiveFrom,effectiveTo,window,cancellationDeadline,renunciationWindow}=semesterDates(rule,input.period);
  const now=input.now??new Date();
+ if(input.eventType==="elected" && semester==="second"){
+   const prior=await db.query("SELECT event_type FROM tax_company_ibs_cbs_option_events WHERE company_id=$1 AND effective_from=$2 AND effective_to=$3 ORDER BY occurred_at DESC LIMIT 1",[input.companyId,"2027-01-01","2027-06-30"]);
+   if(prior.rows[0]?.event_type==="elected") throw new Error("second-semester election is unavailable while first-semester hybrid option remains active");
+ }
  const windowStart=dateOnly(window.start),windowEnd=dateOnly(window.end);
  const deadline=cancellationDeadline?dateOnly(cancellationDeadline):null;
  const cancellationWindow=semesterDates(rule,input.period).semester==="first"
