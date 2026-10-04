@@ -29,23 +29,20 @@ test("2027 IBS/CBS option rejects unsupported period",()=>{
   assert.throws(()=>resolveSimplesNationalIbsCbsOption({period:"2026-12-01",rule: RULE}),/invalid period|outside the 2027 IBS\/CBS option framework/);
 });
 
-
 test("2027 IBS/CBS option rejects impossible calendar dates",()=>{
   assert.throws(()=>resolveSimplesNationalIbsCbsOption({period:"2027-02-30",rule:RULE}),/invalid period/);
 });
-
 
 test("2027 IBS/CBS framework accepts first-semester boundary dates",()=>{
   assert.equal(resolveSimplesNationalIbsCbsOption({period:"2027-01-01",rule:RULE}).semester,"first");
   assert.equal(resolveSimplesNationalIbsCbsOption({period:"2027-06-30",rule:RULE}).semester,"first");
 });
 
-
 const START_OF_ACTIVITY_RULE = {
-  cnpj_registration_window:{start:"2026-10-31",end:"2026-12-31"},
+  ibs_cbs_cnpj_registration_window:{start:"2026-10-31",end:"2026-12-31"},
   option_at_cnpj_registration:true as const,
   ibs_cbs_effective_window:{start:"2027-01-01",end:"2027-06-30"},
-  effect_basis:"cnpj_registration_for_simples_and_ibs_cbs" as const
+  effect_basis:"cnpj_registration_for_ibs_cbs" as const
 };
 
 test("2027 IBS/CBS start-of-activity option uses CNPJ registration instead of the general window",()=>{
