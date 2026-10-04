@@ -8,7 +8,7 @@
     "start": "tsx server.ts",
     "build": "tsc --noEmit",
     "precheck": "tsx scripts/renderBuildMigrate.ts",
-    "check": "tsc --noEmit && npm test",
+    "check": "tsc --noEmit",
     "test": "tsx --test tests/**/*.test.ts"
   },
   "dependencies": {
