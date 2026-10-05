@@ -19,7 +19,7 @@ test("Fator R at 28% resolves to Anexo III",()=>{
     thirteenthSalary12m:1000,
     employerSocialSecurityContribution12m:1500,
     fgts12m:500
-  },RULE);
+  },RULE,{mode:"established",periodYear:2026,periodMonth:10});
   assert.equal(r.fs12,28000);
   assert.equal(r.factorR,0.28);
   assert.equal(r.effectiveAnnex,"III");
@@ -75,7 +75,7 @@ test("Fator R opening month uses FSPA/RPA",()=>{
   const r=calculateFatorR({
     revenue12m:0,employeeAndAvulsoRemuneration12m:0,individualContributorRemuneration12m:0,
     thirteenthSalary12m:0,employerSocialSecurityContribution12m:0,fgts12m:0
-  },RULE,{mode:"opening_month",fspa:2800,rpa:10000});
+  },RULE,{mode:"opening_month",periodYear:2026,periodMonth:1,openingYear:2026,openingMonth:1,fspa:2800,rpa:10000});
   assert.equal(r.factorBasis,"FSPA_RPA");
   assert.equal(r.factorNumerator,2800);
   assert.equal(r.factorDenominator,10000);
@@ -87,7 +87,7 @@ test("Fator R startup period uses completed months before PA",()=>{
   const r=calculateFatorR({
     revenue12m:999999,employeeAndAvulsoRemuneration12m:0,individualContributorRemuneration12m:0,
     thirteenthSalary12m:0,employerSocialSecurityContribution12m:0,fgts12m:0
-  },RULE,{mode:"startup",priorMonths:[
+  },RULE,{mode:"startup",periodYear:2026,periodMonth:3,openingYear:2026,openingMonth:1,priorMonths:[
     {year:2026,month:1,fs:2000,revenue:10000},{year:2026,month:2,fs:2500,revenue:10000}
   ]});
   assert.equal(r.factorBasis,"startup_prior_months");
