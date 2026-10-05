@@ -303,6 +303,56 @@ router.post("/simples-nacional/fator-r",requireAuth,calculationRateLimit,async(r
    }
    periodContext={mode:"established",history:history.map((item:any)=>({year:Number(item.year),month:Number(item.month),fs:Number(item.fs),revenue:Number(item.revenue),regime:item.evidence.regime,origin:item.evidence.sourceReference,evidence:{regime:item.evidence.regime,sourceReference:item.evidence.sourceReference,ruleVersionId:item.evidence.ruleVersionId}}))};
  }
+
+ // From 2027 onward, fiscal documents are the authoritative source for RBT12 and
+ // current-month revenue whenever the company has fiscal-document data in the
+ // applicable window. The Fator R history still carries FS evidence supplied by
+ // the caller, but its revenue side is resolved from the same fiscal source used
+ // by the Simples 2027 calculation.
+ const fiscalCompanyId=typeof req.body?.companyId==="string"&&req.body.companyId.trim()?req.body.companyId.trim():null;
+ let fatorRevenueSource:"fiscal_documents"|"request"="request";
+ let fiscalDocumentCount=0;
+ if(year>=2027&&fiscalCompanyId){
+   const db=initDb();
+   const ownership=await db.query("SELECT id FROM tax_companies WHERE id=$1 AND user_id=$2",[fiscalCompanyId,(req as any).userId]);
+   if(!ownership.rowCount)return res.status(403).json({error:"company not found or not owned by user"});
+   const fiscalWindow=await db.query(
+     `SELECT to_char(issued_at AT TIME ZONE 'UTC','YYYY-MM') period,
+             COALESCE(SUM(revenue_amount-regular_ibs_cbs_amount),0)::numeric simples_revenue,
+             COUNT(*)::int document_count,
+             COUNT(*) FILTER (WHERE classification_status<>'classified')::int unresolved_count
+        FROM tax_fiscal_documents
+       WHERE company_id=$1 AND status='active'
+         AND issued_at >= (to_date($2||'-01','YYYY-MM-DD') - interval '12 months')
+         AND issued_at < (to_date($2||'-01','YYYY-MM-DD') + interval '1 month')
+       GROUP BY 1 ORDER BY 1`,
+     [fiscalCompanyId,`${year}-${String(month).padStart(2,"0")}`]
+   );
+   fiscalDocumentCount=fiscalWindow.rows.reduce((sum:any,row:any)=>sum+Number(row.document_count),0);
+   if(fiscalDocumentCount>0){
+     const unresolved=fiscalWindow.rows.reduce((sum:any,row:any)=>sum+Number(row.unresolved_count),0);
+     if(unresolved>0)return res.status(409).json({status:"needs_review",error:"fiscal documents in the Fator R revenue window include documents without final classification",unresolvedFiscalDocumentCount:unresolved,revenueBasis:"fiscal_documents"});
+     const revenueByMonth=new Map<string,number>(fiscalWindow.rows.map((row:any)=>[String(row.period),Number(row.simples_revenue)]));
+     const key=(y:number,m:number)=>`${y}-${String(m).padStart(2,"0")}`;
+     const periodKey=key(year,month);
+     const historyKeys=Array.from({length:12},(_,i)=>{const d=new Date(Date.UTC(year,month-1,1));d.setUTCMonth(d.getUTCMonth()-(12-i));return key(d.getUTCFullYear(),d.getUTCMonth()+1);});
+     const historyRevenue=historyKeys.reduce((sum,k)=>sum+(revenueByMonth.get(k)??0),0);
+     const coveredHistory=historyKeys.filter(k=>revenueByMonth.has(k)).length;
+     if(historyRevenue>0&&coveredHistory<12)return res.status(409).json({status:"needs_review",error:"fiscal document source does not cover all 12 months of the Fator R RBT12 window",coveredMonths:coveredHistory,requiredMonths:12,revenueBasis:"fiscal_documents"});
+     factorInput.revenue12m=historyRevenue;
+     fatorRevenueSource="fiscal_documents";
+     if(periodContext?.mode==="established"){
+       periodContext.history=periodContext.history.map((item:any)=>({...item,revenue:revenueByMonth.get(key(Number(item.year),Number(item.month)))??0,origin:"fiscal_documents"}));
+     }else if(periodContext?.mode==="startup"){
+       periodContext.priorMonths=periodContext.priorMonths.map((item:any)=>({...item,revenue:revenueByMonth.get(key(Number(item.year),Number(item.month)))??0,origin:"fiscal_documents"}));
+     }
+     if(revenueByMonth.has(periodKey)){
+       req.body.monthlyRevenue=revenueByMonth.get(periodKey)??0;
+     }else if(fiscalDocumentCount>0){
+       req.body.monthlyRevenue=0;
+     }
+   }
+ }
  const factor=calculateFatorR(factorInput,factorRule.parameters as any,periodContext);
  const activityCnae=typeof req.body?.activityCnae==="string"&&req.body.activityCnae.trim()?req.body.activityCnae.trim():null;
  let activityClassification:any=null;
