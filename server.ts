@@ -7,6 +7,7 @@ import revenueRoutes from "./src/routes/revenueRoutes.js";
 import paymentRoutes from "./src/routes/paymentRoutes.js";
 import dashboardRoutes from "./src/routes/dashboardRoutes.js";
 import obligationRoutes from "./src/routes/obligationRoutes.js";
+import fiscalDocumentRoutes from "./src/routes/fiscalDocumentRoutes.js";
 import express from "express";
 import acquisitionRoutes from "./src/routes/acquisitionRoutes.js";
 import cors from "cors";
@@ -15,7 +16,6 @@ import { metricsMiddleware, metricsSnapshot } from "./src/core/metrics.js";
 import { requestId } from "./src/middleware/requestId.js";
 import { rateLimit } from "./src/middleware/rateLimit.js";
 import { errorHandler } from "./src/middleware/errorHandler.js";
-import { sentinelIntegrationMiddleware } from "./src/integrations/sentinel.js";
 import { sentinelIntegrationMiddleware } from "./src/integrations/sentinel.js";
 
 const app = express();
@@ -71,7 +71,6 @@ app.use((_req, res, next) => {
 });
 app.use(metricsMiddleware);
 app.use(sentinelIntegrationMiddleware);
-app.use(sentinelIntegrationMiddleware);
 
 app.use("/api/auth", authRoutes);
 app.use("/api/platform", platformRoutes);
@@ -81,6 +80,7 @@ app.use("/api/revenue", revenueRoutes);
 app.use("/api/payments", paymentRoutes);
 app.use("/api/dashboard", dashboardRoutes);
 app.use("/api/obligations", obligationRoutes);
+app.use("/api/fiscal-documents", fiscalDocumentRoutes);
 
 
 app.get("/robots.txt", (req, res) => {
