@@ -450,8 +450,7 @@ router.get("/calculation-audits/export",requireAuth,async(req,res)=>{try{
  if(format==="csv"){
    const esc=(v:unknown)=>`"${String(v??"").replace(/"/g,'""')}"`;
    const lines=["id,calculation_type,created_at,rule_version_id,rule_code,rule_version,effective_from,effective_to,source_url,source_reference,rule_parameters,input,output",...rows.map((row:any)=>[row.id,row.calculationType,row.createdAt,row.ruleVersion.id,row.ruleVersion.code,row.ruleVersion.version,row.ruleVersion.effectiveFrom,row.ruleVersion.effectiveTo,row.ruleVersion.sourceUrl,row.ruleVersion.sourceReference,JSON.stringify(row.ruleVersion.parameters),JSON.stringify(row.input),JSON.stringify(row.output)].map(esc).join(","))];
-   res.type("text/csv").set("Content-Disposition",`attachment; filename="tax-calculation-audits-${companyId}.csv"`).send(lines.join("
-")); return;
+   res.type("text/csv").set("Content-Disposition",`attachment; filename="tax-calculation-audits-${companyId}.csv"`).send(lines.join("\n")); return;
  }
  res.json({company:own.rows[0],audits:rows,limit});
 }catch{res.status(500).json({error:"failed to export calculation audits"});}});
