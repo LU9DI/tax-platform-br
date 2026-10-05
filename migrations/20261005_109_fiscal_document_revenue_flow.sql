@@ -53,9 +53,34 @@ BEGIN
   IF parent_company IS NULL OR parent_company <> NEW.company_id THEN
     RAISE EXCEPTION 'rectification source document must belong to the same company';
   END IF;
+  IF NEW.id = NEW.supersedes_document_id THEN
+    RAISE EXCEPTION 'rectification source document cannot reference itself';
+  END IF;
   RETURN NEW;
 END;
 $$;
 
 DROP TRIGGER IF EXISTS trg_tax_fiscal_documents_rectification ON tax_fiscal_documents;
 CREATE TRIGGER trg_tax_fiscal_documents_rectification BEFORE INSERT OR UPDATE ON tax_fiscal_documents FOR EACH ROW EXECUTE FUNCTION tax_fiscal_documents_validate_rectification();
+
+CREATE OR REPLACE FUNCTION tax_fiscal_documents_apply_rectification()
+RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  IF NEW.supersedes_document_id IS NULL THEN RETURN NEW; END IF;
+
+  UPDATE tax_fiscal_documents
+     SET status = 'rectified',
+         rectified_by_document_id = NEW.id,
+         updated_at = now()
+   WHERE id = NEW.supersedes_document_id
+     AND company_id = NEW.company_id
+     AND status = 'active';
+
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS trg_tax_fiscal_documents_apply_rectification ON tax_fiscal_documents;
+CREATE TRIGGER trg_tax_fiscal_documents_apply_rectification
+AFTER INSERT OR UPDATE OF supersedes_document_id ON tax_fiscal_documents
+FOR EACH ROW EXECUTE FUNCTION tax_fiscal_documents_apply_rectification();
