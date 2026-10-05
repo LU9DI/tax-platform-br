@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { randomUUID } from "node:crypto";
-import { prepareTaxProfile, simulateConsumptionTransition, calculateMeiLoad, calculateSimplesNationalAnexoI, calculateSimplesNationalAnexoII, calculateSimplesNationalByAnnex, calculateFatorR, resolveSimplesNationalMonthlyRevenue, resolveSimplesNationalIbsCbsOption, resolveSimplesNationalStartOfActivityOption } from "../services/taxService.js";
+import { prepareTaxProfile, simulateConsumptionTransition, calculateMeiLoad, calculateSimplesNationalAnexoI, calculateSimplesNationalAnexoII, calculateSimplesNationalByAnnex, calculateFatorR, resolveSimplesNationalMonthlyRevenue, resolveSimplesNationalRevenueComposition, resolveSimplesNationalIbsCbsOption, resolveSimplesNationalStartOfActivityOption } from "../services/taxService.js";
 import { getEffectiveIbsCbsOption, recordIbsCbsOptionEvent } from "../services/ibsCbsOptionService.js";
 import { classifyFactorRActivity } from "../services/taxActivityClassificationService.js";
 import { initDb } from "../core/db.js";
@@ -46,6 +46,58 @@ router.post("/simulate/consumption-transition",requireAuth,calculationRateLimit,
  if(companyId){const audit=await recordTaxCalculation(companyId,(req as any).userId,"consumption_transition",input,enriched,rule.id,parseIdempotencyKey(req));if(!audit)return res.status(403).json({error:"company not found or not owned by user"});}
  res.json(enriched);
 }catch(e){if(e instanceof Error && (e as Error & {code?:string}).code==="IDEMPOTENCY_CONFLICT")return res.status(409).json({error:e.message});if(e instanceof Error && (e as Error & {code?:string}).code==="54000")return res.status(429).json({error:e.message});res.status(400).json({error:e instanceof Error?e.message:"invalid simulation"});}});
+
+router.post("/simples-nacional/revenue-base",requireAuth,calculationRateLimit,async(req,res)=>{try{
+ const period=typeof req.body?.period==="string"?req.body.period.trim():"";
+ const optionModel=req.body?.optionModel==="simples_hibrido"?"simples_hibrido":"simples_puro";
+ const companyId=typeof req.body?.companyId==="string"&&req.body.companyId.trim()?req.body.companyId.trim():null;
+ if(!/^2027-(0[1-9]|1[0-2])$/.test(period))return res.status(400).json({error:"period must be a 2027 month in YYYY-MM format"});
+ if(!companyId)return res.status(400).json({error:"companyId is required for audited calculations"});
+
+ const db=initDb();
+ const ownership=await db.query("SELECT id FROM tax_companies WHERE id=$1 AND user_id=$2",[companyId,(req as any).userId]);
+ if(!ownership.rowCount)return res.status(403).json({error:"company not found or not owned by user"});
+
+ const current=await db.query(
+   "SELECT amount,regular_ibs_cbs_amount FROM tax_revenues WHERE company_id=$1 AND reference_month=$2",
+   [companyId,period]
+ );
+ const history=await db.query(
+   "SELECT COALESCE(SUM(amount),0)::numeric AS gross_revenue_12m, COALESCE(SUM(regular_ibs_cbs_amount),0)::numeric AS regular_ibs_cbs_12m FROM tax_revenues WHERE company_id=$1 AND reference_month >= to_char(to_date($2||'-01','YYYY-MM-DD') - interval '12 months','YYYY-MM') AND reference_month < $2",
+   [companyId,period]
+ );
+
+ const monthlyGross=Number(current.rows[0]?.amount??0);
+ const monthlyRegularIbsCbs=Number(current.rows[0]?.regular_ibs_cbs_amount??0);
+ const grossRevenue12m=Number(history.rows[0]?.gross_revenue_12m??0);
+ const regularIbsCbsRevenue12m=Number(history.rows[0]?.regular_ibs_cbs_12m??0);
+ const revenueRule=await getEffectiveTaxRule(
+   "SIMPLES_NACIONAL_REVENUE_COMPOSITION_2027",
+   new Date(period+"-01T00:00:00Z")
+ );
+ if(!revenueRule)return res.status(404).json({error:"2027 Simples revenue composition rule not found"});
+
+ const annual=resolveSimplesNationalRevenueComposition({
+   year:2027,grossRevenueAccrued:grossRevenue12m,regularIbsCbsAmount:regularIbsCbsRevenue12m,optionModel
+ },revenueRule.parameters as any);
+ const monthly=resolveSimplesNationalRevenueComposition({
+   year:2027,grossRevenueAccrued:monthlyGross,regularIbsCbsAmount:monthlyRegularIbsCbs,optionModel
+ },revenueRule.parameters as any);
+
+ const input={companyId,period,optionModel,grossRevenue12m,regularIbsCbsRevenue12m,monthlyGrossRevenue:monthlyGross,regularIbsCbsMonthlyRevenue:monthlyRegularIbsCbs};
+ const enriched={
+   ...input,
+   simplesRevenue12m:annual.simplesGrossRevenue,
+   simplesMonthlyRevenue:monthly.simplesGrossRevenue,
+   excludedRegularIbsCbs12m:annual.regularIbsCbsAmountExcluded,
+   excludedRegularIbsCbsMonthly:monthly.regularIbsCbsAmountExcluded,
+   revenueBasis:annual.revenueBasis,
+   ruleVersion:{id:revenueRule.id,code:revenueRule.rule_code,version:revenueRule.version,effectiveFrom:revenueRule.effective_from,effectiveTo:revenueRule.effective_to,sourceUrl:revenueRule.source_url,sourceReference:revenueRule.source_reference,parameters:revenueRule.parameters}
+ };
+ const audit=await recordTaxCalculation(companyId,(req as any).userId,"simples_nacional_revenue_base",input,enriched,revenueRule.id,parseIdempotencyKey(req));
+ if(!audit)return res.status(403).json({error:"company not found or not owned by user"});
+ res.json(enriched);
+}catch(e){if(e instanceof Error && (e as Error & {code?:string}).code==="IDEMPOTENCY_CONFLICT")return res.status(409).json({error:e.message});if(e instanceof Error && (e as Error & {code?:string}).code==="54000")return res.status(429).json({error:e.message});res.status(400).json({error:e instanceof Error?e.message:"invalid Simples revenue base"});}});
 
 router.post("/simples-nacional/anexo-ii",requireAuth,calculationRateLimit,async(req,res)=>{try{
  const revenue12m=Number(req.body?.revenue12m),monthlyRevenue=Number(req.body?.monthlyRevenue),year=Number(req.body?.year??new Date().getUTCFullYear());
