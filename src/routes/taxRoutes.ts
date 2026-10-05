@@ -73,7 +73,7 @@ router.post("/simples-nacional/revenue-base",requireAuth,calculationRateLimit,as
    const unresolved=Number(cd.unresolved_count)+Number(hd.unresolved_count);
    if(unresolved>0)return res.status(409).json({status:"needs_review",error:"fiscal documents in the RBT12 window include documents without final classification",unresolvedFiscalDocumentCount:unresolved,revenueBasis:"fiscal_documents"});
    monthlyGross=Number(cd.gross_revenue);monthlyRegular=Number(cd.regular_ibs_cbs);revenue12m=Number(hd.gross_revenue_12m);regular12m=Number(hd.regular_ibs_cbs_12m);fiscalDocumentCount=Number(cd.document_count)+Number(hd.document_count);revenueSource="fiscal_documents";
-   if(Number(hd.covered_months)<12&&revenue12m>0)return res.status(409).json({status:"needs_review",error:"fiscal document source does not cover all 12 months of the RBT12 window",coveredMonths:Number(hd.covered_months),requiredMonths:12,revenueBasis:"fiscal_documents"});
+   if(Number(hd.covered_months)<12)return res.status(409).json({status:"needs_review",error:"fiscal document source does not cover all 12 months of the RBT12 window; a zero total cannot be treated as proof of zero activity",coveredMonths:Number(hd.covered_months),requiredMonths:12,coverageStatus:"incomplete",revenueBasis:"fiscal_documents"});
  }else{
    const current=await db.query("SELECT amount,regular_ibs_cbs_amount FROM tax_revenues WHERE company_id=$1 AND reference_month=$2",[companyId,period]);
    const history=await db.query("SELECT COALESCE(SUM(amount),0)::numeric gross_revenue_12m,COALESCE(SUM(regular_ibs_cbs_amount),0)::numeric regular_ibs_cbs_12m FROM tax_revenues WHERE company_id=$1 AND reference_month >= to_char(to_date($2||'-01','YYYY-MM-DD') - interval '12 months','YYYY-MM') AND reference_month < $2",[companyId,period]);
@@ -112,7 +112,7 @@ router.post("/simples-nacional/calculate-2027",requireAuth,calculationRateLimit,
    const unresolved=Number(cd.unresolved_count)+Number(hd.unresolved_count);
    if(unresolved>0)return res.status(409).json({status:"needs_review",error:"fiscal documents in the RBT12 window include documents without final classification",unresolvedFiscalDocumentCount:unresolved,revenueBasis:"fiscal_documents"});
    monthlyGross=Number(cd.gross_revenue);monthlyRegular=Number(cd.regular_ibs_cbs);revenue12m=Number(hd.gross_revenue_12m);regular12m=Number(hd.regular_ibs_cbs_12m);fiscalDocumentCount=Number(cd.document_count)+Number(hd.document_count);revenueSource="fiscal_documents";
-   if(Number(hd.covered_months)<12&&revenue12m>0)return res.status(409).json({status:"needs_review",error:"fiscal document source does not cover all 12 months of the RBT12 window",coveredMonths:Number(hd.covered_months),requiredMonths:12,revenueBasis:"fiscal_documents"});
+   if(Number(hd.covered_months)<12)return res.status(409).json({status:"needs_review",error:"fiscal document source does not cover all 12 months of the RBT12 window; a zero total cannot be treated as proof of zero activity",coveredMonths:Number(hd.covered_months),requiredMonths:12,coverageStatus:"incomplete",revenueBasis:"fiscal_documents"});
  }else{
    const current=await db.query("SELECT amount,regular_ibs_cbs_amount FROM tax_revenues WHERE company_id=$1 AND reference_month=$2",[companyId,period]);
    const history=await db.query("SELECT COALESCE(SUM(amount),0)::numeric gross_revenue_12m,COALESCE(SUM(regular_ibs_cbs_amount),0)::numeric regular_ibs_cbs_12m FROM tax_revenues WHERE company_id=$1 AND reference_month >= to_char(to_date($2||'-01','YYYY-MM-DD') - interval '12 months','YYYY-MM') AND reference_month < $2",[companyId,period]);
@@ -338,7 +338,7 @@ router.post("/simples-nacional/fator-r",requireAuth,calculationRateLimit,async(r
      const historyKeys=Array.from({length:12},(_,i)=>{const d=new Date(Date.UTC(year,month-1,1));d.setUTCMonth(d.getUTCMonth()-(12-i));return key(d.getUTCFullYear(),d.getUTCMonth()+1);});
      const historyRevenue=historyKeys.reduce((sum,k)=>sum+(revenueByMonth.get(k)??0),0);
      const coveredHistory=historyKeys.filter(k=>revenueByMonth.has(k)).length;
-     if(historyRevenue>0&&coveredHistory<12)return res.status(409).json({status:"needs_review",error:"fiscal document source does not cover all 12 months of the Fator R RBT12 window",coveredMonths:coveredHistory,requiredMonths:12,revenueBasis:"fiscal_documents"});
+     if(coveredHistory<12)return res.status(409).json({status:"needs_review",error:"fiscal document source does not cover all 12 months of the Fator R RBT12 window; a zero total cannot be treated as proof of zero activity",coveredMonths:coveredHistory,requiredMonths:12,coverageStatus:"incomplete",revenueBasis:"fiscal_documents"});
      factorInput.revenue12m=historyRevenue;
      fatorRevenueSource="fiscal_documents";
      if(periodContext?.mode==="established"){
