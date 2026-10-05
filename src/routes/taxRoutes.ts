@@ -139,7 +139,7 @@ router.post("/simples-nacional/fator-r",requireAuth,calculationRateLimit,async(r
  };
  const activityStartDateRaw=typeof req.body?.activityStartDate==="string"&&req.body.activityStartDate.trim()?req.body.activityStartDate.trim():null;
  let activityStartDate:Date|null=null;
- let periodContext:any={mode:"established"};
+ let periodContext:any=null;
  if(activityStartDateRaw){
    const parsed=new Date(activityStartDateRaw+"T00:00:00Z");
    if(Number.isNaN(parsed.getTime()))return res.status(400).json({error:"invalid activityStartDate"});
@@ -157,14 +157,12 @@ router.post("/simples-nacional/fator-r",requireAuth,calculationRateLimit,async(r
      const fixedStartupMonths=Number((factorRule.parameters as any)?.startup_fixed_months||0);
      if(fixedStartupMonths>=2 && elapsed<fixedStartupMonths){
        periodContext={mode:"startup",priorMonths:[]};
-     }else if(fixedStartupMonths>=2){
-       periodContext={mode:"established"};
      }else{
        const priorMonths=req.body?.priorMonths;
-       if(!Array.isArray(priorMonths)||priorMonths.length!==elapsed)return res.status(400).json({error:`priorMonths must contain exactly ${elapsed} completed month entries`});
-       const expectedMonths=Array.from({length:elapsed},(_,i)=>{const d=new Date(Date.UTC(year,month-1,1));d.setUTCMonth(d.getUTCMonth()-(elapsed-i));return {year:d.getUTCFullYear(),month:d.getUTCMonth()+1};});
+       if(!Array.isArray(priorMonths)||priorMonths.length!==elapsed-1)return res.status(400).json({error:\`priorMonths must contain exactly \${Math.max(elapsed-1,0)} applicable historical month entries\`});
+       const expectedMonths=Array.from({length:Math.max(elapsed-1,0)},(_,i)=>{const d=new Date(Date.UTC(year,month-1,1));d.setUTCMonth(d.getUTCMonth()-(elapsed-i));return {year:d.getUTCFullYear(),month:d.getUTCMonth()+1};});
        const invalidPeriod=priorMonths.some((item:any,i:number)=>Number(item?.year)!==expectedMonths[i].year||Number(item?.month)!==expectedMonths[i].month);
-       if(invalidPeriod)return res.status(400).json({error:"priorMonths must identify each completed month in chronological order from the opening month through the month before the calculation period"});
+       if(invalidPeriod)return res.status(400).json({error:"priorMonths must identify each applicable historical month in chronological order, excluding the month immediately before the calculation period"});
        if(priorMonths.some((item:any)=>!item||!Number.isFinite(Number(item.fs))||Number(item.fs)<0||!Number.isFinite(Number(item.revenue))||Number(item.revenue)<0))return res.status(400).json({error:"priorMonths entries must contain non-negative numeric fs and revenue"});
        if(priorMonths.some((item:any)=>!item.evidence||typeof item.evidence.sourceReference!=="string"||!item.evidence.sourceReference.trim()||typeof item.evidence.ruleVersionId!=="string"||!["mei","simples_nacional"].includes(item.evidence.regime)))return res.status(422).json({error:"each priorMonths entry requires monthly normative evidence: regime, sourceReference and ruleVersionId",code:"FACTOR_R_MONTHLY_EVIDENCE_REQUIRED"});
        for(const item of priorMonths){
@@ -180,6 +178,25 @@ router.post("/simples-nacional/fator-r",requireAuth,calculationRateLimit,async(r
        }
        periodContext={mode:"startup",priorMonths:priorMonths.map((item:any)=>({year:Number(item.year),month:Number(item.month),fs:Number(item.fs),revenue:Number(item.revenue),regime:item.evidence.regime,origin:item.evidence.sourceReference,evidence:{regime:item.evidence.regime,sourceReference:item.evidence.sourceReference,ruleVersionId:item.evidence.ruleVersionId}}))};
      }
+   }else if(elapsed>=12){
+     const history=req.body?.history;
+     if(!Array.isArray(history)||history.length!==12)return res.status(400).json({error:"history must contain exactly 12 monthly entries for an established Fator R calculation"});
+     if(history.some((item:any)=>!item||!Number.isFinite(Number(item.fs))||Number(item.fs)<0||!Number.isFinite(Number(item.revenue))||Number(item.revenue)<0))return res.status(400).json({error:"history entries must contain non-negative numeric fs and revenue"});
+     if(history.some((item:any)=>!item.evidence||typeof item.evidence.sourceReference!=="string"||!item.evidence.sourceReference.trim()||typeof item.evidence.ruleVersionId!=="string"||!["mei","simples_nacional"].includes(item.evidence.regime)))return res.status(422).json({error:"each history entry requires monthly normative evidence: regime, sourceReference and ruleVersionId",code:"FACTOR_R_MONTHLY_EVIDENCE_REQUIRED"});
+     for(const item of history){
+       const evidenceRule=await initDb().query("SELECT id,code,effective_from,effective_to FROM tax_rules WHERE id=$1",[item.evidence.ruleVersionId]);
+       if(!evidenceRule.rowCount)return res.status(422).json({error:"monthly evidence references an unknown tax rule version",code:"FACTOR_R_EVIDENCE_RULE_NOT_FOUND"});
+       const ev=evidenceRule.rows[0];
+       const evDate=new Date(Date.UTC(Number(item.year),Number(item.month)-1,1));
+       const effectiveFrom=new Date(String(ev.effective_from)+"T00:00:00Z");
+       const effectiveTo=ev.effective_to?new Date(String(ev.effective_to)+"T00:00:00Z"):null;
+       if(evDate<effectiveFrom||(effectiveTo&&evDate>effectiveTo))return res.status(422).json({error:"monthly evidence rule is not effective for the referenced month",code:"FACTOR_R_EVIDENCE_RULE_NOT_EFFECTIVE"});
+       const expectedPrefix=item.evidence.regime==="mei"?"MEI_":"SIMPLES_NACIONAL_";
+       if(!String(ev.code).startsWith(expectedPrefix))return res.status(422).json({error:"monthly evidence rule does not match the declared regime",code:"FACTOR_R_EVIDENCE_REGIME_RULE_MISMATCH"});
+     }
+     const expected=Array.from({length:12},(_,i)=>{const d=new Date(Date.UTC(year,month-1,1));d.setUTCMonth(d.getUTCMonth()-(12-i));return {year:d.getUTCFullYear(),month:d.getUTCMonth()+1};});
+     if(history.some((item:any,i:number)=>Number(item.year)!==expected[i].year||Number(item.month)!==expected[i].month))return res.status(400).json({error:"history must contain exactly the 12 months immediately preceding the calculation period in chronological order"});
+     periodContext={mode:"established",history:history.map((item:any)=>({year:Number(item.year),month:Number(item.month),fs:Number(item.fs),revenue:Number(item.revenue),regime:item.evidence.regime,origin:item.evidence.sourceReference,evidence:{regime:item.evidence.regime,sourceReference:item.evidence.sourceReference,ruleVersionId:item.evidence.ruleVersionId}}))};
    }else if(elapsed<0){
      return res.status(400).json({error:"activityStartDate cannot be after calculation period"});
    }
