@@ -124,6 +124,107 @@ export function resolveSimplesNationalMonthlyRevenue(input: { year: number; gros
   };
 }
 
+export type SimplesNationalRevenueCompositionRule = {
+  year: 2027;
+  monthly_basis: "gross_revenue_accrued";
+  regular_ibs_cbs_excluded_from_simples_gross_revenue: true;
+  exclusion_basis: "regular_ibs_cbs_amount";
+};
+
+export function resolveSimplesNationalRevenueComposition(input: {
+  year: number;
+  grossRevenueAccrued: number;
+  regularIbsCbsAmount?: number;
+  optionModel?: "simples_puro" | "simples_hibrido";
+}, rule: SimplesNationalRevenueCompositionRule) {
+  if (!Number.isInteger(input.year)) throw new Error("year must be an integer");
+  if (input.year < 2027) {
+    throw new Error("the 2027 Simples Nacional revenue composition rule cannot be applied before 2027");
+  }
+  if (
+    rule?.year !== 2027 ||
+    rule?.monthly_basis !== "gross_revenue_accrued" ||
+    rule?.regular_ibs_cbs_excluded_from_simples_gross_revenue !== true ||
+    rule?.exclusion_basis !== "regular_ibs_cbs_amount"
+  ) {
+    throw new Error("unsupported Simples Nacional revenue composition rule");
+  }
+
+  const grossRevenueAccrued = finiteNonNegative(input.grossRevenueAccrued, "grossRevenueAccrued");
+  const regularIbsCbsAmount = finiteNonNegative(input.regularIbsCbsAmount ?? 0, "regularIbsCbsAmount");
+  const optionModel = input.optionModel ?? "simples_puro";
+
+  if (!["simples_puro", "simples_hibrido"].includes(optionModel)) {
+    throw new Error("unsupported Simples Nacional IBS/CBS option model");
+  }
+
+  if (optionModel === "simples_puro" && regularIbsCbsAmount > 0) {
+    throw new Error("regular IBS/CBS amount cannot be excluded for the pure Simples Nacional model");
+  }
+  if (regularIbsCbsAmount > grossRevenueAccrued) {
+    throw new Error("regularIbsCbsAmount cannot exceed grossRevenueAccrued");
+  }
+
+  const simplesGrossRevenue = grossRevenueAccrued - regularIbsCbsAmount;
+  return {
+    year: 2027,
+    optionModel,
+    grossRevenueAccrued,
+    regularIbsCbsAmountExcluded: regularIbsCbsAmount,
+    simplesGrossRevenue,
+    revenueBasis: "gross_revenue_accrued_less_regular_ibs_cbs" as const,
+    ruleBasis: rule.exclusion_basis
+  };
+}
+
+export function calculateSimplesNationalBracketed2027(
+  input: {
+    revenue12m: number;
+    monthlyRevenue: number;
+    regularIbsCbsRevenue12m?: number;
+    regularIbsCbsMonthlyRevenue?: number;
+    optionModel?: "simples_puro" | "simples_hibrido";
+  },
+  bracketRule: SimplesNationalRuleParameters,
+  revenueRule: SimplesNationalRevenueCompositionRule
+) {
+  const optionModel = input.optionModel ?? "simples_puro";
+  const revenue12m = finiteNonNegative(input.revenue12m, "revenue12m");
+  const monthlyRevenue = finiteNonNegative(input.monthlyRevenue, "monthlyRevenue");
+  const regularIbsCbsRevenue12m = finiteNonNegative(input.regularIbsCbsRevenue12m ?? 0, "regularIbsCbsRevenue12m");
+  const regularIbsCbsMonthlyRevenue = finiteNonNegative(input.regularIbsCbsMonthlyRevenue ?? 0, "regularIbsCbsMonthlyRevenue");
+
+  const annualComposition = resolveSimplesNationalRevenueComposition({
+    year: 2027,
+    grossRevenueAccrued: revenue12m,
+    regularIbsCbsAmount: regularIbsCbsRevenue12m,
+    optionModel
+  }, revenueRule);
+  const monthlyComposition = resolveSimplesNationalRevenueComposition({
+    year: 2027,
+    grossRevenueAccrued: monthlyRevenue,
+    regularIbsCbsAmount: regularIbsCbsMonthlyRevenue,
+    optionModel
+  }, revenueRule);
+
+  const result = calculateSimplesNationalBracketed({
+    revenue12m: annualComposition.simplesGrossRevenue,
+    monthlyRevenue: monthlyComposition.simplesGrossRevenue
+  }, bracketRule);
+
+  return {
+    ...result,
+    grossRevenue12m: annualComposition.grossRevenueAccrued,
+    grossMonthlyRevenue: monthlyComposition.grossRevenueAccrued,
+    regularIbsCbsRevenue12mExcluded: annualComposition.regularIbsCbsAmountExcluded,
+    regularIbsCbsMonthlyRevenueExcluded: monthlyComposition.regularIbsCbsAmountExcluded,
+    revenue12m: annualComposition.simplesGrossRevenue,
+    monthlyRevenue: monthlyComposition.simplesGrossRevenue,
+    revenueBasis: annualComposition.revenueBasis,
+    ibsCbsOptionModel: optionModel
+  };
+}
+
 export function calculateSimplesNationalBracketed(input: {
   revenue12m: number;
   monthlyRevenue: number;
