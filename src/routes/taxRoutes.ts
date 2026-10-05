@@ -96,7 +96,7 @@ router.post("/simples-nacional/calculate-2027",requireAuth,calculationRateLimit,
  if(!companyId)return res.status(400).json({error:"companyId is required for audited calculations"});
  if(!annex)return res.status(400).json({error:"annex must be I or II"});
  const db=initDb();
- const ownership=await db.query("SELECT id FROM tax_companies WHERE id=$1 AND user_id=$2",[companyId,(req as any).userId]);
+ const ownership=await db.query("SELECT id,opened_at FROM tax_companies WHERE id=$1 AND user_id=$2",[companyId,(req as any).userId]);
  if(!ownership.rowCount)return res.status(403).json({error:"company not found or not owned by user"});
  const revenueRule=await getEffectiveTaxRule("SIMPLES_NACIONAL_REVENUE_COMPOSITION_2027",new Date(period+"-01T00:00:00Z"));
  const optionRule=await getEffectiveTaxRule("SIMPLES_NACIONAL_IBS_CBS_OPTIONS_2027",new Date(period+"-01T00:00:00Z"));
