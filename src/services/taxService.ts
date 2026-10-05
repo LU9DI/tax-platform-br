@@ -384,6 +384,12 @@ export type FatorRRuleParameters = {
   window_basis?: string;
 };
 
+export type FatorRHistoryEvidence = {
+  regime: "mei" | "simples_nacional";
+  sourceReference: string;
+  ruleVersionId: string;
+};
+
 export type FatorRHistoryMonth = {
   year: number;
   month: number;
@@ -391,6 +397,7 @@ export type FatorRHistoryMonth = {
   revenue: number;
   regime?: "mei" | "simples_nacional" | "other";
   origin?: string;
+  evidence?: FatorRHistoryEvidence;
 };
 
 export type FatorRPeriodContext =
@@ -505,7 +512,8 @@ export function calculateFatorR(input: FatorRInput, rule: FatorRRuleParameters, 
           fs: finiteNonNegative(item.fs, "history fs"),
           revenue: finiteNonNegative(item.revenue, "history revenue"),
           regime: item.regime,
-          origin: item.origin
+          origin: item.origin,
+          evidence: item.evidence
         });
       }
 
@@ -514,6 +522,10 @@ export function calculateFatorR(input: FatorRInput, rule: FatorRRuleParameters, 
       }
 
       monthsUsed = expectedKeys.map((key) => byKey.get(key)!);
+      if (monthsUsed.some((item) => !item.evidence || !item.evidence.sourceReference || !item.evidence.ruleVersionId ||
+          !["mei", "simples_nacional"].includes(item.evidence.regime))) {
+        throw new Error("Fator R history requires monthly normative evidence for every month");
+      }
       factorNumerator = monthsUsed.reduce((sum, item) => sum + item.fs, 0);
       factorDenominator = monthsUsed.reduce((sum, item) => sum + item.revenue, 0);
       factorBasis = "startup_prior_months";
@@ -566,6 +578,14 @@ export function calculateFatorR(input: FatorRInput, rule: FatorRRuleParameters, 
     windowStart,
     windowEnd,
     monthsUsed,
+    monthlyEvidence: monthsUsed.map((item) => ({
+      period: { year: item.year, month: item.month },
+      fs: item.fs,
+      revenue: item.revenue,
+      regime: item.regime ?? item.evidence?.regime ?? null,
+      origin: item.origin ?? null,
+      evidence: item.evidence ?? null
+    })),
     inputs: {
       employeeAndAvulsoRemuneration12m: employee,
       individualContributorRemuneration12m: individual,
