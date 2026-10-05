@@ -35,3 +35,15 @@ test("2027 Fator R keeps normal FS12/RBT12 after startup",()=>{
   assert.equal(r.factorR,0.28);
   assert.equal(r.effectiveAnnex,"III");
 });
+
+
+test("2027 Fator R third month uses months antecedent to the month before PA",()=>{
+  const input={revenue12m:0,employeeAndAvulsoRemuneration12m:0,individualContributorRemuneration12m:0,thirteenthSalary12m:0,employerSocialSecurityContribution12m:0,fgts12m:0};
+  const third=calculateFatorR(input,RULE,{mode:"startup",periodYear:2027,periodMonth:3,openingYear:2027,openingMonth:1,priorMonths:[{year:2027,month:1,fs:28000,revenue:100000}]});
+  assert.equal(third.factorR,0.28);
+  assert.equal(third.factorBasis,"startup_prior_months");
+  assert.deepEqual(third.monthsUsed.map((m)=>`${m.year}-${String(m.month).padStart(2,"0")}`),["2027-01"]);
+  assert.equal(third.windowStart,"2027-01");
+  assert.equal(third.windowEnd,"2027-01");
+  assert.throws(()=>calculateFatorR(input,RULE,{mode:"startup",periodYear:2027,periodMonth:3,openingYear:2027,openingMonth:1,priorMonths:[{year:2027,month:1,fs:28000,revenue:100000},{year:2027,month:2,fs:28000,revenue:100000}]}));
+});
