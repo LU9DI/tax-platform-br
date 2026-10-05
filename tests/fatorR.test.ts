@@ -41,13 +41,13 @@ test("Fator R below 28% resolves to Anexo V",()=>{
 });
 
 test("Fator R with zero FS12 and zero RBT12 uses 0.01",()=>{
-  const r=calculateFatorR({revenue12m:0,employeeAndAvulsoRemuneration12m:0,individualContributorRemuneration12m:0,thirteenthSalary12m:0,employerSocialSecurityContribution12m:0,fgts12m:0},RULE);
+  const r=calculateFatorR({revenue12m:0,employeeAndAvulsoRemuneration12m:0,individualContributorRemuneration12m:0,thirteenthSalary12m:0,employerSocialSecurityContribution12m:0,fgts12m:0},RULE,{mode:"established",periodYear:2026,periodMonth:10});
   assert.equal(r.factorR,0.01);
   assert.equal(r.effectiveAnnex,"V");
 });
 
 test("Fator R with FS12 positive and RBT12 zero uses 0.28",()=>{
-  const r=calculateFatorR({revenue12m:0,employeeAndAvulsoRemuneration12m:1000,individualContributorRemuneration12m:0,thirteenthSalary12m:0,employerSocialSecurityContribution12m:0,fgts12m:0},RULE);
+  const r=calculateFatorR({revenue12m:0,employeeAndAvulsoRemuneration12m:1000,individualContributorRemuneration12m:0,thirteenthSalary12m:0,employerSocialSecurityContribution12m:0,fgts12m:0},RULE,{mode:"established",periodYear:2026,periodMonth:10});
   assert.equal(r.factorR,0.28);
   assert.equal(r.effectiveAnnex,"III");
 });
