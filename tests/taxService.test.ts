@@ -75,13 +75,15 @@ const FACTOR_INPUT = {
   fgts12m: 0,
 };
 
+const ESTABLISHED_HISTORY = Array.from({length:12},(_,i)=>{ const key=(2026*12+9)-11+i; const year=Math.floor(key/12); const month=(key%12)+1; const regime=(i<6?"mei":"simples_nacional") as "mei"|"simples_nacional"; return {year,month,fs:28000,revenue:100000,regime,origin:`test:${year}-${String(month).padStart(2,"0")}`,evidence:{regime,sourceReference:`test:${year}-${String(month).padStart(2,"0")}`,ruleVersionId:`rule:${year}-${String(month).padStart(2,"0")}`}}; });
+
 test("Fator R uses the explicit FS12/RBT12 ratio", () => {
   const r = calculateFatorR({
     ...FACTOR_INPUT,
     revenue12m: 100000,
     employeeAndAvulsoRemuneration12m: 10000,
     individualContributorRemuneration12m: 10000,
-  }, FATOR_R_RULE, { mode: "established", periodYear: 2026, periodMonth: 10 });
+  }, FATOR_R_RULE, { mode: "established", periodYear: 2026, periodMonth: 10, history: ESTABLISHED_HISTORY });
   assert.equal(r.factorR, 0.2);
   assert.equal(r.effectiveAnnex, "V");
 });
@@ -139,7 +141,7 @@ test("zero payroll with positive revenue resolves to 0.01", () => {
 test("threshold exactly 0.28 selects Annex III", () => {
   const r = calculateFatorR({
     ...FACTOR_INPUT, revenue12m: 1000, employeeAndAvulsoRemuneration12m: 280
-  }, FATOR_R_RULE, { mode: "established", periodYear: 2026, periodMonth: 10 });
+  }, FATOR_R_RULE, { mode: "established", periodYear: 2026, periodMonth: 10, history: ESTABLISHED_HISTORY });
   assert.equal(r.factorR, 0.28);
   assert.equal(r.effectiveAnnex, "III");
 });

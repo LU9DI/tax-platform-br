@@ -11,6 +11,8 @@ const RULE={
   selection:{greater_or_equal_threshold:"III" as const,below_threshold:"V" as const}
 };
 
+const ESTABLISHED_HISTORY = Array.from({length:12},(_,i)=>{ const key=(2026*12+9)-11+i; const year=Math.floor(key/12); const month=(key%12)+1; const regime=(i<6?"mei":"simples_nacional") as "mei"|"simples_nacional"; return {year,month,fs:28000,revenue:100000,regime,origin:`test:${year}-${String(month).padStart(2,"0")}`,evidence:{regime,sourceReference:`test:${year}-${String(month).padStart(2,"0")}`,ruleVersionId:`rule:${year}-${String(month).padStart(2,"0")}`}}; });
+
 test("Fator R at 28% resolves to Anexo III",()=>{
   const r=calculateFatorR({
     revenue12m:100000,
@@ -19,7 +21,7 @@ test("Fator R at 28% resolves to Anexo III",()=>{
     thirteenthSalary12m:1000,
     employerSocialSecurityContribution12m:1500,
     fgts12m:500
-  },RULE,{mode:"established",periodYear:2026,periodMonth:10});
+  },RULE,{mode:"established",periodYear:2026,periodMonth:10,history:ESTABLISHED_HISTORY});
   assert.equal(r.fs12,28000);
   assert.equal(r.factorR,0.28);
   assert.equal(r.effectiveAnnex,"III");
@@ -34,20 +36,20 @@ test("Fator R below 28% resolves to Anexo V",()=>{
     thirteenthSalary12m:1000,
     employerSocialSecurityContribution12m:1000,
     fgts12m:500
-  },RULE,{mode:"established",periodYear:2026,periodMonth:10});
+  },RULE,{mode:"established",periodYear:2026,periodMonth:10,history:ESTABLISHED_HISTORY});
   assert.equal(r.fs12,22500);
   assert.equal(r.factorR,0.225);
   assert.equal(r.effectiveAnnex,"V");
 });
 
 test("Fator R with zero FS12 and zero RBT12 uses 0.01",()=>{
-  const r=calculateFatorR({revenue12m:0,employeeAndAvulsoRemuneration12m:0,individualContributorRemuneration12m:0,thirteenthSalary12m:0,employerSocialSecurityContribution12m:0,fgts12m:0},RULE,{mode:"established",periodYear:2026,periodMonth:10});
+  const r=calculateFatorR({revenue12m:0,employeeAndAvulsoRemuneration12m:0,individualContributorRemuneration12m:0,thirteenthSalary12m:0,employerSocialSecurityContribution12m:0,fgts12m:0},RULE,{mode:"established",periodYear:2026,periodMonth:10,history:ESTABLISHED_HISTORY});
   assert.equal(r.factorR,0.01);
   assert.equal(r.effectiveAnnex,"V");
 });
 
 test("Fator R with FS12 positive and RBT12 zero uses 0.28",()=>{
-  const r=calculateFatorR({revenue12m:0,employeeAndAvulsoRemuneration12m:1000,individualContributorRemuneration12m:0,thirteenthSalary12m:0,employerSocialSecurityContribution12m:0,fgts12m:0},RULE,{mode:"established",periodYear:2026,periodMonth:10});
+  const r=calculateFatorR({revenue12m:0,employeeAndAvulsoRemuneration12m:1000,individualContributorRemuneration12m:0,thirteenthSalary12m:0,employerSocialSecurityContribution12m:0,fgts12m:0},RULE,{mode:"established",periodYear:2026,periodMonth:10,history:ESTABLISHED_HISTORY});
   assert.equal(r.factorR,0.28);
   assert.equal(r.effectiveAnnex,"III");
 });
@@ -60,7 +62,7 @@ test("Fator R keeps the 12-month input components explicit",()=>{
     thirteenthSalary12m:2000,
     employerSocialSecurityContribution12m:10000,
     fgts12m:4000
-  },RULE,{mode:"established",periodYear:2026,periodMonth:10});
+  },RULE,{mode:"established",periodYear:2026,periodMonth:10,history:ESTABLISHED_HISTORY});
   assert.equal(r.periodMonths,12);
   assert.deepEqual(r.inputs,{
     employeeAndAvulsoRemuneration12m:30000,
