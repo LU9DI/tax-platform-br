@@ -57,8 +57,8 @@ test("2027 Fator R retains MEI to Simples provenance across the historical windo
     {year:2027,month:1,fs:10000,revenue:30000,regime:"mei",origin:"mei:2027-01",evidence:{regime:"mei",sourceReference:"mei:2027-01",ruleVersionId:"mei-rule-2027"}},
     {year:2027,month:2,fs:8000,revenue:25000,regime:"simples_nacional",origin:"sn:2027-02",evidence:{regime:"simples_nacional",sourceReference:"sn:2027-02",ruleVersionId:"sn-rule-2027"}}
   ]});
-  assert.deepEqual(r.monthlyEvidence.map((m)=>m.evidence.regime),["mei","simples_nacional"]);
-  assert.deepEqual(r.monthlyEvidence.map((m)=>m.evidence.ruleVersionId),["mei-rule-2027","sn-rule-2027"]);
+  assert.deepEqual(r.monthlyEvidence.map((m)=>m.evidence!.regime),["mei","simples_nacional"]);
+  assert.deepEqual(r.monthlyEvidence.map((m)=>m.evidence!.ruleVersionId),["mei-rule-2027","sn-rule-2027"]);
   assert.deepEqual(r.monthlyEvidence.map((m)=>m.evidence!.sourceReference),["mei:2027-01","sn:2027-02"]);
 });
 
