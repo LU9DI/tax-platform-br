@@ -16,6 +16,7 @@ import { requestId } from "./src/middleware/requestId.js";
 import { rateLimit } from "./src/middleware/rateLimit.js";
 import { errorHandler } from "./src/middleware/errorHandler.js";
 import { sentinelIntegrationMiddleware } from "./src/integrations/sentinel.js";
+import { sentinelIntegrationMiddleware } from "./src/integrations/sentinel.js";
 
 const app = express();
 const port = Number(process.env.PORT || 3000);
@@ -69,6 +70,7 @@ app.use((_req, res, next) => {
   next();
 });
 app.use(metricsMiddleware);
+app.use(sentinelIntegrationMiddleware);
 app.use(sentinelIntegrationMiddleware);
 
 app.use("/api/auth", authRoutes);
