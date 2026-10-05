@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { simulateConsumptionTransition } from "../src/services/taxService.js";
+import { calculateMeiLoad, simulateConsumptionTransition } from "../src/services/taxService.js";
 
 const RTC_RULE={cbs_rate:0.009,ibs_rate:0.001};
 
@@ -144,4 +144,22 @@ test("threshold exactly 0.28 selects Annex III", () => {
   }, FATOR_R_RULE, { mode: "established", periodYear: 2026, periodMonth: 10, history: ESTABLISHED_HISTORY });
   assert.equal(r.factorR, 0.28);
   assert.equal(r.effectiveAnnex, "III");
+});
+
+
+test("MEI validates start month and avoids invalid annual-limit arithmetic", () => {
+  const rule = { annual_limit: 81000, monthly_das: { services: 86.05, commerce: 82.05, commerce_services: 87.05 } };
+  assert.throws(() => calculateMeiLoad({ revenueYearToDate: 1000, month: 3, activity: "services", startMonth: 0 }, rule), /startMonth must be an integer/);
+  assert.throws(() => calculateMeiLoad({ revenueYearToDate: 1000, month: 3, activity: "services", startMonth: 13 }, rule), /startMonth must be an integer/);
+  assert.throws(() => calculateMeiLoad({ revenueYearToDate: 1000, month: 2, activity: "services", startMonth: 3 }, rule), /month cannot be earlier/);
+  assert.throws(() => calculateMeiLoad({ revenueYearToDate: 1000, month: 1, activity: "services" }, { ...rule, annual_limit: 0 }), /annual limit must be greater than zero/);
+});
+
+test("MEI projection uses elapsed months and remaining months from the activity start", () => {
+  const rule = { annual_limit: 81000, monthly_das: { services: 86.05, commerce: 82.05, commerce_services: 87.05 } };
+  const r = calculateMeiLoad({ revenueYearToDate: 10000, month: 4, activity: "services", startMonth: 3, year: 2026 }, rule);
+  assert.equal(r.annualLimit, 67500);
+  assert.equal(r.projectedAnnualRevenue, 60000);
+  assert.equal(r.remainingLimit, 57500);
+  assert.equal(r.referenceYear, 2026);
 });
