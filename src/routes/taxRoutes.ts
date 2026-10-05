@@ -49,7 +49,7 @@ router.post("/simulate/consumption-transition",requireAuth,calculationRateLimit,
 
 router.post("/simples-nacional/revenue-base",requireAuth,calculationRateLimit,async(req,res)=>{try{
  const period=typeof req.body?.period==="string"?req.body.period.trim():"";
- const optionModel=req.body?.optionModel==="simples_hibrido"?"simples_hibrido":"simples_puro";
+ const requestedOptionModel=req.body?.optionModel==="simples_hibrido"?"simples_hibrido":req.body?.optionModel==="simples_puro"?"simples_puro":undefined;
  const companyId=typeof req.body?.companyId==="string"&&req.body.companyId.trim()?req.body.companyId.trim():null;
  if(!/^2027-(0[1-9]|1[0-2])$/.test(period))return res.status(400).json({error:"period must be a 2027 month in YYYY-MM format"});
  if(!companyId)return res.status(400).json({error:"companyId is required for audited calculations"});
@@ -75,6 +75,14 @@ router.post("/simples-nacional/revenue-base",requireAuth,calculationRateLimit,as
    "SIMPLES_NACIONAL_REVENUE_COMPOSITION_2027",
    new Date(period+"-01T00:00:00Z")
  );
+ const optionRule=await getEffectiveTaxRule(
+   "SIMPLES_NACIONAL_IBS_CBS_OPTIONS_2027",
+   new Date(period+"-01T00:00:00Z")
+ );
+ if(!optionRule)return res.status(404).json({error:"2027 IBS/CBS option rule not found"});
+ const effectiveOption=await getEffectiveIbsCbsOption(companyId,period,optionRule.parameters as any);
+ const optionModel=effectiveOption.model;
+ if(requestedOptionModel && requestedOptionModel!==optionModel)return res.status(409).json({error:"requested IBS/CBS option model does not match the company's effective option state",effectiveOptionModel:optionModel});
  if(!revenueRule)return res.status(404).json({error:"2027 Simples revenue composition rule not found"});
 
  const annual=resolveSimplesNationalRevenueComposition({
