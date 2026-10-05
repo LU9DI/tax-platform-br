@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { randomUUID } from "node:crypto";
-import { prepareTaxProfile, simulateConsumptionTransition, calculateMeiLoad, calculateSimplesNationalAnexoI, calculateSimplesNationalAnexoII, calculateSimplesNationalByAnnex, calculateSimplesNationalBracketed2027, calculateFatorR, resolveSimplesNationalMonthlyRevenue, resolveSimplesNationalRevenueComposition, resolveSimplesNationalIbsCbsOption, resolveSimplesNationalStartOfActivityOption } from "../services/taxService.js";
+import { prepareTaxProfile, simulateConsumptionTransition, calculateMeiLoad, calculateSimplesNationalAnexoI, calculateSimplesNationalAnexoII, calculateSimplesNationalByAnnex, calculateSimplesNationalBracketed2027, resolveSimplesNationalStartupRbt12, calculateFatorR, resolveSimplesNationalMonthlyRevenue, resolveSimplesNationalRevenueComposition, resolveSimplesNationalIbsCbsOption, resolveSimplesNationalStartOfActivityOption } from "../services/taxService.js";
 import { getEffectiveIbsCbsOption, recordIbsCbsOptionEvent } from "../services/ibsCbsOptionService.js";
 import { classifyFactorRActivity } from "../services/taxActivityClassificationService.js";
 import { initDb } from "../core/db.js";
@@ -55,7 +55,7 @@ router.post("/simples-nacional/revenue-base",requireAuth,calculationRateLimit,as
  if(!/^2027-(0[1-9]|1[0-2])$/.test(period))return res.status(400).json({error:"period must be a 2027 month in YYYY-MM format"});
  if(!companyId)return res.status(400).json({error:"companyId is required for audited calculations"});
  const db=initDb();
- const ownership=await db.query("SELECT id FROM tax_companies WHERE id=$1 AND user_id=$2",[companyId,(req as any).userId]);
+ const ownership=await db.query("SELECT id,opened_at FROM tax_companies WHERE id=$1 AND user_id=$2",[companyId,(req as any).userId]);
  if(!ownership.rowCount)return res.status(403).json({error:"company not found or not owned by user"});
  const revenueRule=await getEffectiveTaxRule("SIMPLES_NACIONAL_REVENUE_COMPOSITION_2027",new Date(period+"-01T00:00:00Z"));
  const optionRule=await getEffectiveTaxRule("SIMPLES_NACIONAL_IBS_CBS_OPTIONS_2027",new Date(period+"-01T00:00:00Z"));
@@ -113,15 +113,15 @@ router.post("/simples-nacional/calculate-2027",requireAuth,calculationRateLimit,
    const unresolved=Number(cd.unresolved_count)+Number(hd.unresolved_count);
    if(unresolved>0)return res.status(409).json({status:"needs_review",error:"fiscal documents in the RBT12 window include documents without final classification",unresolvedFiscalDocumentCount:unresolved,revenueBasis:"fiscal_documents"});
    monthlyGross=Number(cd.gross_revenue);monthlyRegular=Number(cd.regular_ibs_cbs);revenue12m=Number(hd.gross_revenue_12m);regular12m=Number(hd.regular_ibs_cbs_12m);fiscalDocumentCount=Number(cd.document_count)+Number(hd.document_count);revenueSource="fiscal_documents";
-   if(Number(hd.covered_months)<12)return res.status(409).json({status:"needs_review",error:"fiscal document source does not cover all 12 months of the RBT12 window; a zero total cannot be treated as proof of zero activity",coveredMonths:Number(hd.covered_months),requiredMonths:12,coverageStatus:"incomplete",revenueBasis:"fiscal_documents"});
+   const requiredMonths=requiredFiscalHistoryMonths(ownership.rows[0]?.opened_at,period); if(Number(hd.covered_months)<requiredMonths)return res.status(409).json({status:"needs_review",error:"fiscal document source does not cover the required historical months of the RBT12 window; a missing month cannot be treated as proof of zero activity",coveredMonths:Number(hd.covered_months),requiredMonths,coverageStatus:"incomplete",revenueBasis:"fiscal_documents"});
  }else{
    const current=await db.query("SELECT amount,regular_ibs_cbs_amount FROM tax_revenues WHERE company_id=$1 AND reference_month=$2",[companyId,period]);
    const history=await db.query("SELECT COALESCE(SUM(amount),0)::numeric gross_revenue_12m,COALESCE(SUM(regular_ibs_cbs_amount),0)::numeric regular_ibs_cbs_12m FROM tax_revenues WHERE company_id=$1 AND reference_month >= to_char(to_date($2||'-01','YYYY-MM-DD') - interval '12 months','YYYY-MM') AND reference_month < $2",[companyId,period]);
    monthlyGross=Number(current.rows[0]?.amount??0);monthlyRegular=Number(current.rows[0]?.regular_ibs_cbs_amount??0);revenue12m=Number(history.rows[0]?.gross_revenue_12m??0);regular12m=Number(history.rows[0]?.regular_ibs_cbs_12m??0);
  }
- const calculated=calculateSimplesNationalBracketed2027({revenue12m,monthlyRevenue:monthlyGross,regularIbsCbsRevenue12m:regular12m,regularIbsCbsMonthlyRevenue:monthlyRegular,optionModel},annexRule.parameters as any,revenueRule.parameters as any);
- const input={companyId,period,annex,optionModel,revenue12m,monthlyGrossRevenue:monthlyGross,regularIbsCbsRevenue12m:regular12m,regularIbsCbsMonthlyRevenue:monthlyRegular,revenueSource,fiscalDocumentCount};
- const enriched={...calculated,sourceOfTruth:revenueSource,fiscalDocumentCount,period,annex,ruleVersions:{
+ const annualComposition=resolveSimplesNationalRevenueComposition({year:2027,grossRevenueAccrued:revenue12m,regularIbsCbsAmount:regular12m,optionModel},revenueRule.parameters as any);\n const monthlyComposition=resolveSimplesNationalRevenueComposition({year:2027,grossRevenueAccrued:monthlyGross,regularIbsCbsAmount:monthlyRegular,optionModel},revenueRule.parameters as any);\n const startupRbt12=resolveSimplesNationalStartupRbt12({period,openedAt:ownership.rows[0]?.opened_at,historicalNetRevenue:annualComposition.simplesGrossRevenue,currentNetRevenue:monthlyComposition.simplesGrossRevenue},(annexRule.parameters as any)?.rbt12_start_of_activity);\n const effectiveRevenue12m=startupRbt12.revenue12m;\n const calculated=calculateSimplesNationalBracketed2027({revenue12m:effectiveRevenue12m,monthlyRevenue:monthlyGross,regularIbsCbsRevenue12m:regular12m,regularIbsCbsMonthlyRevenue:monthlyRegular,optionModel},annexRule.parameters as any,revenueRule.parameters as any);
+ const input={companyId,period,annex,optionModel,revenue12m:effectiveRevenue12m,historicalRevenue12m:revenue12m,monthlyGrossRevenue:monthlyGross,regularIbsCbsRevenue12m:regular12m,regularIbsCbsMonthlyRevenue:monthlyRegular,revenueSource,fiscalDocumentCount};
+ const enriched={...calculated,startOfActivityRbt12:startupRbt12,sourceOfTruth:revenueSource,fiscalDocumentCount,period,annex,ruleVersions:{
    revenueComposition:{id:revenueRule.id,code:revenueRule.rule_code,version:revenueRule.version,effectiveFrom:revenueRule.effective_from,effectiveTo:revenueRule.effective_to,sourceUrl:revenueRule.source_url,sourceReference:revenueRule.source_reference,parameters:revenueRule.parameters},
    annex:{id:annexRule.id,code:annexRule.rule_code,version:annexRule.version,effectiveFrom:annexRule.effective_from,effectiveTo:annexRule.effective_to,sourceUrl:annexRule.source_url,sourceReference:annexRule.source_reference,parameters:annexRule.parameters}
  }};
