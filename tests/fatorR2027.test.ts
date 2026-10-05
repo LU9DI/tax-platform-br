@@ -23,17 +23,43 @@ test("2027 Fator R fixes the first two startup months at 0.28",()=>{
   assert.equal(second.factorBasis,"startup_fixed_rule");
 });
 
-test("2027 Fator R keeps normal FS12/RBT12 after startup",()=>{
+function establishedHistory() {
+  return Array.from({length:12},(_,i)=>({
+    year:2026 + Math.floor((i+3)/12),
+    month:((i+3)%12)+1,
+    fs:28000,
+    revenue:100000,
+    regime:i<6?"mei":"simples_nacional",
+    origin:`source:${i}`,
+    evidence:{regime:i<6?"mei":"simples_nacional",sourceReference:`source:${i}`,ruleVersionId:`rule:${i}`}
+  }));
+}
+
+test("2027 Fator R established uses exactly the 12 prior monthly records",()=>{
   const r=calculateFatorR({
-    revenue12m:100000,
-    employeeAndAvulsoRemuneration12m:20000,
-    individualContributorRemuneration12m:5000,
-    thirteenthSalary12m:1000,
-    employerSocialSecurityContribution12m:1500,
-    fgts12m:500
-  },RULE,{mode:"established",periodYear:2027,periodMonth:3});
+    revenue12m:999999,
+    employeeAndAvulsoRemuneration12m:1,
+    individualContributorRemuneration12m:1,
+    thirteenthSalary12m:1,
+    employerSocialSecurityContribution12m:1,
+    fgts12m:1
+  },RULE,{mode:"established",periodYear:2027,periodMonth:3,history:establishedHistory()});
   assert.equal(r.factorR,0.28);
+  assert.equal(r.factorBasis,"FS12_RBT12");
+  assert.equal(r.windowStart,"2026-03");
+  assert.equal(r.windowEnd,"2027-02");
+  assert.equal(r.factorNumerator,336000);
+  assert.equal(r.factorDenominator,1200000);
   assert.equal(r.effectiveAnnex,"III");
+});
+
+test("2027 Fator R established rejects incomplete, duplicate, future, or unevidenced history",()=>{
+  const base=establishedHistory();
+  assert.throws(()=>calculateFatorR({revenue12m:0,employeeAndAvulsoRemuneration12m:0,individualContributorRemuneration12m:0,thirteenthSalary12m:0,employerSocialSecurityContribution12m:0,fgts12m:0},RULE,{mode:"established",periodYear:2027,periodMonth:3,history:base.slice(1)}),/every month/);
+  assert.throws(()=>calculateFatorR({revenue12m:0,employeeAndAvulsoRemuneration12m:0,individualContributorRemuneration12m:0,thirteenthSalary12m:0,employerSocialSecurityContribution12m:0,fgts12m:0},RULE,{mode:"established",periodYear:2027,periodMonth:3,history:[...base,{...base[11]}]}),/duplicate/);
+  assert.throws(()=>calculateFatorR({revenue12m:0,employeeAndAvulsoRemuneration12m:0,individualContributorRemuneration12m:0,thirteenthSalary12m:0,employerSocialSecurityContribution12m:0,fgts12m:0},RULE,{mode:"established",periodYear:2027,periodMonth:3,history:[...base.slice(0,11),{...base[11],year:2027,month:3}]}),/calculation period or a future/);
+  const unevidenced=base.map((x,i)=>i===5?{...x,evidence:undefined}:x);
+  assert.throws(()=>calculateFatorR({revenue12m:0,employeeAndAvulsoRemuneration12m:0,individualContributorRemuneration12m:0,thirteenthSalary12m:0,employerSocialSecurityContribution12m:0,fgts12m:0},RULE,{mode:"established",periodYear:2027,periodMonth:3,history:unevidenced}),/monthly normative evidence/);
 });
 
 
