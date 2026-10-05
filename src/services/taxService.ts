@@ -95,10 +95,33 @@ export type RevenueRecognitionRuleParameters = { monthly_basis: "gross_revenue_a
 
 export function resolveSimplesNationalMonthlyRevenue(input: { year: number; grossRevenueAccrued?: number }, rule: RevenueRecognitionRuleParameters) {
   if (!Number.isInteger(input.year)) throw new Error("year must be an integer");
-  if (rule?.monthly_basis !== "gross_revenue_accrued" || rule?.cash_regime_for_monthly_calculation !== false) throw new Error("unsupported Simples Nacional revenue recognition rule");
-  if (input.grossRevenueAccrued === undefined) throw new Error("grossRevenueAccrued is required for the applicable revenue recognition rule");
+
+  // The 2027 rule is deliberately strict: monthly Simples Nacional
+  // calculation must use accrued gross revenue from the operation/billing
+  // basis. Do not silently accept a partially populated or mixed rule.
+  if (
+    rule?.monthly_basis !== "gross_revenue_accrued" ||
+    rule?.cash_regime_for_monthly_calculation !== false ||
+    rule?.goods_services_recognition !== "operation_billing" ||
+    rule?.fiscal_document_as_general_reference !== true
+  ) {
+    throw new Error("unsupported Simples Nacional revenue recognition rule");
+  }
+
+  if (input.year < 2027) {
+    throw new Error("the 2027 Simples Nacional revenue recognition rule cannot be applied before 2027");
+  }
+
+  if (input.grossRevenueAccrued === undefined) {
+    throw new Error("grossRevenueAccrued is required for the applicable revenue recognition rule");
+  }
+
   const monthlyRevenue = finiteNonNegative(input.grossRevenueAccrued, "grossRevenueAccrued");
-  return { monthlyRevenue, revenueRecognitionBasis: rule.monthly_basis, grossRevenueAccrued: monthlyRevenue };
+  return {
+    monthlyRevenue,
+    revenueRecognitionBasis: rule.monthly_basis,
+    grossRevenueAccrued: monthlyRevenue,
+  };
 }
 
 export function calculateSimplesNationalBracketed(input: {
