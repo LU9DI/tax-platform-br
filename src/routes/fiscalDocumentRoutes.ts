@@ -130,6 +130,35 @@ router.post("/:companyId/:documentId/rectify", requireAuth, async (req, res) => 
   }
 });
 
+router.post("/:companyId/:documentId/classify", requireAuth, async (req, res) => {
+  try {
+    const companyId = String(req.params.companyId), documentId = String(req.params.documentId), uid = userId(req);
+    if (!UUID.test(companyId) || !UUID.test(documentId)) return res.status(400).json({ error: "invalid id" });
+    if (!(await ownedCompany(companyId, uid))) return res.status(404).json({ error: "company not found" });
+
+    const code = typeof req.body?.classificationCode === "string" ? req.body.classificationCode.trim() : "";
+    const basis = typeof req.body?.classificationBasis === "string" ? req.body.classificationBasis.trim() : "";
+    const ruleId = typeof req.body?.classificationRuleVersionId === "string" ? req.body.classificationRuleVersionId : "";
+    if (!code || !basis || !UUID.test(ruleId)) return res.status(400).json({ error: "classification code, basis and rule version are required" });
+
+    const rule = await initDb().query("SELECT id FROM tax_rules WHERE id=$1", [ruleId]);
+    if (!rule.rowCount) return res.status(400).json({ error: "classification rule version not found" });
+
+    const r = await initDb().query(
+      `UPDATE tax_fiscal_documents
+       SET classification_status='classified',classification_code=$1,classification_basis=$2,classification_rule_version_id=$3
+       WHERE id=$4 AND company_id=$5 AND status='active' AND classification_status IN ('pending','rejected')
+       RETURNING id,classification_status,classification_code,classification_basis,classification_rule_version_id`,
+      [code, basis, ruleId, documentId, companyId]
+    );
+    if (!r.rowCount) return res.status(404).json({ error: "classifiable fiscal document not found" });
+    await audit(uid, "tax_fiscal_document.classified", documentId, { companyId, classificationCode: code, classificationRuleVersionId: ruleId });
+    return res.json({ ok: true, document: r.rows[0] });
+  } catch {
+    return res.status(400).json({ error: "failed to classify fiscal document" });
+  }
+});
+
 router.get("/:companyId", requireAuth, async (req, res) => {
   try {
     const companyId = String(req.params.companyId);
