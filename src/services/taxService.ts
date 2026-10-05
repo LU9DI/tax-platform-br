@@ -405,6 +405,7 @@ export type FatorRPeriodContext =
       mode: "established";
       periodYear: number;
       periodMonth: number;
+      history: FatorRHistoryMonth[];
     }
   | {
       mode: "opening_month";
@@ -533,8 +534,50 @@ export function calculateFatorR(input: FatorRInput, rule: FatorRRuleParameters, 
       windowEnd = `${monthsUsed[monthsUsed.length - 1].year}-${String(monthsUsed[monthsUsed.length - 1].month).padStart(2, "0")}`;
     }
   } else {
-    windowStart = `${periodContext.periodYear}-${String(periodContext.periodMonth).padStart(2, "0")}`;
-    windowEnd = windowStart;
+    if (!Array.isArray(periodContext.history)) {
+      throw new Error("Fator R established calculation requires monthly history");
+    }
+    const expectedStart = periodKey - periodMonths;
+    const expectedEnd = periodKey - 1;
+    const expectedKeys: number[] = [];
+    for (let key = expectedStart; key <= expectedEnd; key++) expectedKeys.push(key);
+    const byKey = new Map<number, FatorRHistoryMonth>();
+
+    for (const item of periodContext.history) {
+      if (!Number.isInteger(item.year) || item.year < 2000 ||
+          !Number.isInteger(item.month) || item.month < 1 || item.month > 12) {
+        throw new Error("invalid Fator R history month");
+      }
+      const key = monthKey(item.year, item.month);
+      if (key >= periodKey) {
+        throw new Error("Fator R established history cannot contain the calculation period or a future month");
+      }
+      if (byKey.has(key)) throw new Error("duplicate Fator R history month");
+      byKey.set(key, {
+        year: item.year,
+        month: item.month,
+        fs: finiteNonNegative(item.fs, "history fs"),
+        revenue: finiteNonNegative(item.revenue, "history revenue"),
+        regime: item.regime,
+        origin: item.origin,
+        evidence: item.evidence
+      });
+    }
+
+    if (byKey.size !== expectedKeys.length || expectedKeys.some((key) => !byKey.has(key))) {
+      throw new Error("Fator R established history must contain every month in the 12-month window");
+    }
+
+    monthsUsed = expectedKeys.map((key) => byKey.get(key)!);
+    if (monthsUsed.some((item) => !item.evidence || !item.evidence.sourceReference || !item.evidence.ruleVersionId ||
+        !["mei", "simples_nacional"].includes(item.evidence.regime))) {
+      throw new Error("Fator R history requires monthly normative evidence for every month");
+    }
+    factorNumerator = monthsUsed.reduce((sum, item) => sum + item.fs, 0);
+    factorDenominator = monthsUsed.reduce((sum, item) => sum + item.revenue, 0);
+    factorBasis = "FS12_RBT12";
+    windowStart = `${monthsUsed[0].year}-${String(monthsUsed[0].month).padStart(2, "0")}`;
+    windowEnd = `${monthsUsed[monthsUsed.length - 1].year}-${String(monthsUsed[monthsUsed.length - 1].month).padStart(2, "0")}`;
   }
 
   const zeroBothFactor = Number(rule?.zero_both_factor);
