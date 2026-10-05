@@ -319,7 +319,7 @@ router.post("/simples-nacional/fator-r",requireAuth,calculationRateLimit,async(r
  let fiscalDocumentCount=0;
  if(year>=2027&&fiscalCompanyId){
    const db=initDb();
-   const ownership=await db.query("SELECT id FROM tax_companies WHERE id=$1 AND user_id=$2",[fiscalCompanyId,(req as any).userId]);
+   const ownership=await db.query("SELECT id,opened_at FROM tax_companies WHERE id=$1 AND user_id=$2",[fiscalCompanyId,(req as any).userId]);
    if(!ownership.rowCount)return res.status(403).json({error:"company not found or not owned by user"});
    const fiscalWindow=await db.query(
      `SELECT to_char(issued_at AT TIME ZONE 'UTC','YYYY-MM') period,
@@ -343,7 +343,7 @@ router.post("/simples-nacional/fator-r",requireAuth,calculationRateLimit,async(r
      const historyKeys=Array.from({length:12},(_,i)=>{const d=new Date(Date.UTC(year,month-1,1));d.setUTCMonth(d.getUTCMonth()-(12-i));return key(d.getUTCFullYear(),d.getUTCMonth()+1);});
      const historyRevenue=historyKeys.reduce((sum,k)=>sum+(revenueByMonth.get(k)??0),0);
      const coveredHistory=historyKeys.filter(k=>revenueByMonth.has(k)).length;
-     const requiredMonths=requiredFiscalHistoryMonths(periodContext?.mode==="startup"&&periodContext.openingYear&&periodContext.openingMonth?`${periodContext.openingYear}-${String(periodContext.openingMonth).padStart(2,"0")}`:null,`${year}-${String(month).padStart(2,"0")}`); if(coveredHistory<requiredMonths)return res.status(409).json({status:"needs_review",error:"fiscal document source does not cover the required historical months of the RBT12 window; a missing month cannot be treated as proof of zero activity",coveredMonths:coveredHistory,requiredMonths,coverageStatus:"incomplete",revenueBasis:"fiscal_documents"});
+     const requiredMonths=requiredFiscalHistoryMonths(ownership.rows[0]?.opened_at,`${year}-${String(month).padStart(2,"0")}`); if(coveredHistory<requiredMonths)return res.status(409).json({status:"needs_review",error:"fiscal document source does not cover the required historical months of the RBT12 window; a missing month cannot be treated as proof of zero activity",coveredMonths:coveredHistory,requiredMonths,coverageStatus:"incomplete",revenueBasis:"fiscal_documents"});
      factorInput.revenue12m=historyRevenue;
      fatorRevenueSource="fiscal_documents";
      if(periodContext?.mode==="established"){
