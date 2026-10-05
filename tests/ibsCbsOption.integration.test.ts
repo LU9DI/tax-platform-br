@@ -21,6 +21,10 @@ test(
       assert.equal(ruleResult.rowCount, 1);
       const rule = ruleResult.rows[0].parameters;
       const ruleVersionId = ruleResult.rows[0].id as string;
+      assert.deepEqual(rule.second_semester.cancellation_window, { start: "2027-03-01", end: "2027-05-31" });
+      assert.equal(rule.second_semester.cancellation_deadline, "2027-05-31");
+      assert.deepEqual(rule.start_of_activity.ibs_cbs_cnpj_registration_window, { start: "2026-10-31", end: "2026-12-31" });
+      assert.equal(rule.start_of_activity.effect_basis, "cnpj_registration_for_ibs_cbs");
 
       const before = await getEffectiveIbsCbsOption(companyId, "2027-01-15", rule);
       assert.equal(before.model, "simples_puro");
