@@ -459,23 +459,9 @@ export function calculateFatorR(input: FatorRInput, rule: FatorRRuleParameters, 
     }
     const fspa = finiteNonNegative(periodContext.fspa, "fspa");
     const rpa = finiteNonNegative(periodContext.rpa, "rpa");
-    const startupFixedMonths = Number(rule.startup_fixed_months ?? 0);
-    if (!Number.isInteger(startupFixedMonths) || startupFixedMonths < 0) {
-      throw new Error("invalid Fator R startup rule parameters");
-    }
-    if (startupFixedMonths >= 1) {
-      const startupFixedFactor = Number(rule.startup_fixed_factor);
-      if (!Number.isFinite(startupFixedFactor) || startupFixedFactor < 0 || startupFixedFactor > 1) {
-        throw new Error("Fator R startup_fixed_factor is unavailable or invalid");
-      }
-      factorNumerator = startupFixedFactor;
-      factorDenominator = 1;
-      factorBasis = "startup_fixed_rule";
-    } else {
-      factorNumerator = fspa;
-      factorDenominator = rpa;
-      factorBasis = "FSPA_RPA";
-    }
+    factorNumerator = fspa;
+    factorDenominator = rpa;
+    factorBasis = "FSPA_RPA";
   } else if (periodContext.mode === "startup") {
     if (!Number.isInteger(periodContext.openingYear) || periodContext.openingYear < 2000 ||
         !Number.isInteger(periodContext.openingMonth) || periodContext.openingMonth < 1 || periodContext.openingMonth > 12) {
