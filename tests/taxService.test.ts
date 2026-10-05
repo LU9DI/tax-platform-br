@@ -132,7 +132,7 @@ test("startup history rejects duplicate and missing months", () => {
 
 test("zero payroll with positive revenue resolves to 0.01", () => {
   const r = calculateFatorR({ ...FACTOR_INPUT, revenue12m: 1000 }, FATOR_R_RULE, {
-    mode: "established", periodYear: 2026, periodMonth: 10
+    mode: "established", periodYear: 2026, periodMonth: 10, history: ESTABLISHED_HISTORY
   });
   assert.equal(r.factorR, 0.01);
   assert.equal(r.effectiveAnnex, "V");
