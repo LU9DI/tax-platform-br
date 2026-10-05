@@ -39,11 +39,30 @@ test("2027 Fator R keeps normal FS12/RBT12 after startup",()=>{
 
 test("2027 Fator R third month uses months antecedent to the month before PA",()=>{
   const input={revenue12m:0,employeeAndAvulsoRemuneration12m:0,individualContributorRemuneration12m:0,thirteenthSalary12m:0,employerSocialSecurityContribution12m:0,fgts12m:0};
-  const third=calculateFatorR(input,RULE,{mode:"startup",periodYear:2027,periodMonth:3,openingYear:2027,openingMonth:1,priorMonths:[{year:2027,month:1,fs:28000,revenue:100000}]});
+  const third=calculateFatorR(input,RULE,{mode:"startup",periodYear:2027,periodMonth:3,openingYear:2027,openingMonth:1,priorMonths:[{year:2027,month:1,fs:28000,revenue:100000,regime:"mei",origin:"mei-payroll:2027-01",evidence:{regime:"mei",sourceReference:"mei-payroll:2027-01",ruleVersionId:"mei-rule-2027"}}]});
   assert.equal(third.factorR,0.28);
   assert.equal(third.factorBasis,"startup_prior_months");
   assert.deepEqual(third.monthsUsed.map((m)=>`${m.year}-${String(m.month).padStart(2,"0")}`),["2027-01"]);
   assert.equal(third.windowStart,"2027-01");
   assert.equal(third.windowEnd,"2027-01");
-  assert.throws(()=>calculateFatorR(input,RULE,{mode:"startup",periodYear:2027,periodMonth:3,openingYear:2027,openingMonth:1,priorMonths:[{year:2027,month:1,fs:28000,revenue:100000},{year:2027,month:2,fs:28000,revenue:100000}]}));
+  assert.throws(()=>calculateFatorR(input,RULE,{mode:"startup",periodYear:2027,periodMonth:3,openingYear:2027,openingMonth:1,priorMonths:[{year:2027,month:1,fs:28000,revenue:100000,regime:"mei",origin:"mei-payroll:2027-01",evidence:{regime:"mei",sourceReference:"mei-payroll:2027-01",ruleVersionId:"mei-rule-2027"}},{year:2027,month:2,fs:28000,revenue:100000,regime:"simples_nacional",origin:"simples-payroll:2027-02",evidence:{regime:"simples_nacional",sourceReference:"simples-payroll:2027-02",ruleVersionId:"simples-rule-2027"}}]}));
+});
+
+
+test("2027 Fator R retains MEI to Simples provenance across the historical window",()=>{
+  const r=calculateFatorR({
+    revenue12m:0,employeeAndAvulsoRemuneration12m:0,individualContributorRemuneration12m:0,
+    thirteenthSalary12m:0,employerSocialSecurityContribution12m:0,fgts12m:0
+  },RULE,{mode:"startup",periodYear:2027,periodMonth:4,openingYear:2027,openingMonth:1,priorMonths:[
+    {year:2027,month:1,fs:10000,revenue:30000,regime:"mei",origin:"mei:2027-01",evidence:{regime:"mei",sourceReference:"mei:2027-01",ruleVersionId:"mei-rule-2027"}},
+    {year:2027,month:2,fs:8000,revenue:25000,regime:"simples_nacional",origin:"sn:2027-02",evidence:{regime:"simples_nacional",sourceReference:"sn:2027-02",ruleVersionId:"sn-rule-2027"}}
+  ]});
+  assert.deepEqual(r.monthlyEvidence.map((m)=>m.evidence.regime),["mei","simples_nacional"]);
+  assert.deepEqual(r.monthlyEvidence.map((m)=>m.evidence.ruleVersionId),["mei-rule-2027","sn-rule-2027"]);
+  assert.deepEqual(r.monthlyEvidence.map((m)=>m.evidence.sourceReference),["mei:2027-01","sn:2027-02"]);
+});
+
+test("2027 Fator R rejects a startup history without monthly evidence",()=>{
+  const input={revenue12m:0,employeeAndAvulsoRemuneration12m:0,individualContributorRemuneration12m:0,thirteenthSalary12m:0,employerSocialSecurityContribution12m:0,fgts12m:0};
+  assert.throws(()=>calculateFatorR(input,RULE,{mode:"startup",periodYear:2027,periodMonth:3,openingYear:2027,openingMonth:1,priorMonths:[{year:2027,month:1,fs:28000,revenue:100000}]}),/monthly normative evidence/);
 });
