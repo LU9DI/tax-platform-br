@@ -15,10 +15,10 @@ const RULE={
 
 test("2027 Fator R fixes the first two startup months at 0.28",()=>{
   const input={revenue12m:0,employeeAndAvulsoRemuneration12m:0,individualContributorRemuneration12m:0,thirteenthSalary12m:0,employerSocialSecurityContribution12m:0,fgts12m:0};
-  const opening=calculateFatorR(input,RULE,{mode:"opening_month",fspa:0,rpa:0});
-  assert.equal(opening.factorR,0.28);
-  assert.equal(opening.factorBasis,"startup_fixed_rule");
-  const second=calculateFatorR(input,RULE,{mode:"startup",priorMonths:[]});
+  const opening=calculateFatorR(input,RULE,{mode:"opening_month",periodYear:2027,periodMonth:1,openingYear:2027,openingMonth:1,fspa:0,rpa:0});
+  assert.equal(opening.factorR,0.01);
+  assert.equal(opening.factorBasis,"FSPA_RPA");
+  const second=calculateFatorR(input,RULE,{mode:"startup",periodYear:2027,periodMonth:2,openingYear:2027,openingMonth:1,priorMonths:[]});
   assert.equal(second.factorR,0.28);
   assert.equal(second.factorBasis,"startup_fixed_rule");
 });
@@ -31,7 +31,7 @@ test("2027 Fator R keeps normal FS12/RBT12 after startup",()=>{
     thirteenthSalary12m:1000,
     employerSocialSecurityContribution12m:1500,
     fgts12m:500
-  },RULE);
+  },RULE,{mode:"established",periodYear:2027,periodMonth:3});
   assert.equal(r.factorR,0.28);
   assert.equal(r.effectiveAnnex,"III");
 });
