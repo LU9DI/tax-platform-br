@@ -2,7 +2,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   simulateConsumptionTransition,
-  resolveSimplesNationalRevenueComposition,\n  resolveSimplesNationalStartupRbt12,
+  resolveSimplesNationalRevenueComposition,
+  resolveSimplesNationalStartupRbt12,
   calculateSimplesNationalBracketed2027,
   calculateFatorR,
   FatorRRuleParameters
@@ -225,4 +226,43 @@ test("2027 fiscal RBT12 and Fator R can consume the same net revenue basis", () 
   assert.equal(fator.factorR, 0.26);
   assert.equal(fator.effectiveAnnex, "V");
 });
-\n\ntest("2027 startup RBT12 annualizes the first month from fiscal net revenue", () => {\n  const r = resolveSimplesNationalStartupRbt12({\n    period: "2027-01",\n    openedAt: "2027-01-10",\n    historicalNetRevenue: 0,\n    currentNetRevenue: 10000\n  }, { applicable_first_months: 12, first_month_multiplier: 12, subsequent_months_average_multiplier: 12 });\n  assert.equal(r.applicable, true);\n  assert.equal(r.monthsSinceOpening, 1);\n  assert.equal(r.revenue12m, 120000);\n  assert.equal(r.basis, "startup_first_month_annualized");\n});\n\ntest("2027 startup RBT12 uses accumulated average after the first month", () => {\n  const r = resolveSimplesNationalStartupRbt12({\n    period: "2027-02",\n    openedAt: "2027-01-10",\n    historicalNetRevenue: 10000,\n    currentNetRevenue: 14000\n  }, { applicable_first_months: 12, first_month_multiplier: 12, subsequent_months_average_multiplier: 12 });\n  assert.equal(r.applicable, true);\n  assert.equal(r.monthsSinceOpening, 2);\n  assert.equal(r.revenue12m, 144000);\n  assert.equal(r.basis, "startup_average_annualized");\n});\n\ntest("2027 startup RBT12 stops proportionalization after the first 12 months", () => {\n  const r = resolveSimplesNationalStartupRbt12({\n    period: "2028-01",\n    openedAt: "2027-01-10",\n    historicalNetRevenue: 132000,\n    currentNetRevenue: 14000\n  }, { applicable_first_months: 12, first_month_multiplier: 12, subsequent_months_average_multiplier: 12 });\n  assert.equal(r.applicable, false);\n  assert.equal(r.monthsSinceOpening, 13);\n  assert.equal(r.revenue12m, 132000);\n  assert.equal(r.basis, "normal_12_month_window");\n});\n
+
+
+test("2027 startup RBT12 annualizes the first month from fiscal net revenue", () => {
+  const r = resolveSimplesNationalStartupRbt12({
+    period: "2027-01",
+    openedAt: "2027-01-10",
+    historicalNetRevenue: 0,
+    currentNetRevenue: 10000
+  }, { applicable_first_months: 12, first_month_multiplier: 12, subsequent_months_average_multiplier: 12 });
+  assert.equal(r.applicable, true);
+  assert.equal(r.monthsSinceOpening, 1);
+  assert.equal(r.revenue12m, 120000);
+  assert.equal(r.basis, "startup_first_month_annualized");
+});
+
+test("2027 startup RBT12 uses accumulated average after the first month", () => {
+  const r = resolveSimplesNationalStartupRbt12({
+    period: "2027-02",
+    openedAt: "2027-01-10",
+    historicalNetRevenue: 10000,
+    currentNetRevenue: 14000
+  }, { applicable_first_months: 12, first_month_multiplier: 12, subsequent_months_average_multiplier: 12 });
+  assert.equal(r.applicable, true);
+  assert.equal(r.monthsSinceOpening, 2);
+  assert.equal(r.revenue12m, 144000);
+  assert.equal(r.basis, "startup_average_annualized");
+});
+
+test("2027 startup RBT12 stops proportionalization after the first 12 months", () => {
+  const r = resolveSimplesNationalStartupRbt12({
+    period: "2028-01",
+    openedAt: "2027-01-10",
+    historicalNetRevenue: 132000,
+    currentNetRevenue: 14000
+  }, { applicable_first_months: 12, first_month_multiplier: 12, subsequent_months_average_multiplier: 12 });
+  assert.equal(r.applicable, false);
+  assert.equal(r.monthsSinceOpening, 13);
+  assert.equal(r.revenue12m, 132000);
+  assert.equal(r.basis, "normal_12_month_window");
+});
