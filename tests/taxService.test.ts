@@ -1,6 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { simulateConsumptionTransition } from "../src/services/taxService.js";
+import {
+  simulateConsumptionTransition,
+  resolveSimplesNationalRevenueComposition,
+  calculateSimplesNationalBracketed2027,
+  calculateFatorR,
+  FatorRRuleParameters
+} from "../src/services/taxService.js";
 
 const RTC_RULE={cbs_rate:0.009,ibs_rate:0.001};
 
@@ -49,10 +55,7 @@ test("rule evidence stays bound to the resolved version when validity dates chan
     ruleVersion: { ...evidenceFromX.ruleVersion, effectiveTo: "2026-06-30" },
   }, ruleX), true);
   assert.equal(ruleEvidenceMatches(evidenceFromY, ruleX), false);
-});
-
-
-import { calculateFatorR, FatorRRuleParameters } from "../src/services/taxService.js";
+}
 
 const FATOR_R_RULE: FatorRRuleParameters = {
   threshold: 0.28,
@@ -144,4 +147,81 @@ test("threshold exactly 0.28 selects Annex III", () => {
   }, FATOR_R_RULE, { mode: "established", periodYear: 2026, periodMonth: 10, history: ESTABLISHED_HISTORY });
   assert.equal(r.factorR, 0.28);
   assert.equal(r.effectiveAnnex, "III");
+});
+
+const REVENUE_RULE = {
+  year: 2027 as const,
+  monthly_basis: "gross_revenue_accrued" as const,
+  regular_ibs_cbs_excluded_from_simples_gross_revenue: true as const,
+  exclusion_basis: "regular_ibs_cbs_amount" as const
+};
+
+test("2027 fiscal revenue segregation excludes regular IBS/CBS from hybrid Simples revenue", () => {
+  const r = resolveSimplesNationalRevenueComposition({
+    year: 2027,
+    grossRevenueAccrued: 12500,
+    regularIbsCbsAmount: 1500,
+    optionModel: "simples_hibrido"
+  }, REVENUE_RULE);
+
+  assert.equal(r.grossRevenueAccrued, 12500);
+  assert.equal(r.regularIbsCbsAmountExcluded, 1500);
+  assert.equal(r.simplesGrossRevenue, 11000);
+  assert.equal(r.revenueBasis, "gross_revenue_accrued_less_regular_ibs_cbs");
+});
+
+test("2027 pure Simples rejects regular IBS/CBS segregation", () => {
+  assert.throws(() => resolveSimplesNationalRevenueComposition({
+    year: 2027,
+    grossRevenueAccrued: 12500,
+    regularIbsCbsAmount: 1500,
+    optionModel: "simples_puro"
+  }, REVENUE_RULE), /cannot be excluded/);
+});
+
+test("2027 bracket calculation preserves fiscal gross, excluded IBS/CBS and net RBT12", () => {
+  const annexRule = {
+    annex: "I" as const,
+    activity: "commerce" as const,
+    brackets: [
+      { max_revenue_12m: 180000, nominal_rate: 0.04, deduction: 0 },
+      { max_revenue_12m: 360000, nominal_rate: 0.073, deduction: 5940 }
+    ]
+  };
+
+  const r = calculateSimplesNationalBracketed2027({
+    revenue12m: 120000,
+    monthlyRevenue: 12000,
+    regularIbsCbsRevenue12m: 12000,
+    regularIbsCbsMonthlyRevenue: 1200,
+    optionModel: "simples_hibrido"
+  }, annexRule, REVENUE_RULE);
+
+  assert.equal(r.grossRevenue12m, 120000);
+  assert.equal(r.regularIbsCbsRevenue12mExcluded, 12000);
+  assert.equal(r.revenue12m, 108000);
+  assert.equal(r.grossMonthlyRevenue, 12000);
+  assert.equal(r.regularIbsCbsMonthlyRevenueExcluded, 1200);
+  assert.equal(r.monthlyRevenue, 10800);
+  assert.equal(r.revenueBasis, "gross_revenue_accrued_less_regular_ibs_cbs");
+});
+
+test("2027 fiscal RBT12 and Fator R can consume the same net revenue basis", () => {
+  const fiscalGrossByMonth = Array.from({length:12}, () => 10000);
+  const regularIbsCbsByMonth = Array.from({length:12}, () => 1000);
+  const rbt12 = fiscalGrossByMonth.reduce((sum, value, index) => sum + value - regularIbsCbsByMonth[index], 0);
+  const fator = calculateFatorR({
+    ...FACTOR_INPUT,
+    revenue12m: rbt12,
+    employeeAndAvulsoRemuneration12m: 28080
+  }, FATOR_R_RULE, {
+    mode: "established",
+    periodYear: 2027,
+    periodMonth: 1,
+    history: ESTABLISHED_HISTORY
+  });
+
+  assert.equal(rbt12, 108000);
+  assert.equal(fator.factorR, 0.26);
+  assert.equal(fator.effectiveAnnex, "V");
 });
