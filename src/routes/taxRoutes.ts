@@ -119,7 +119,11 @@ router.post("/simples-nacional/calculate-2027",requireAuth,calculationRateLimit,
    const history=await db.query("SELECT COALESCE(SUM(amount),0)::numeric gross_revenue_12m,COALESCE(SUM(regular_ibs_cbs_amount),0)::numeric regular_ibs_cbs_12m FROM tax_revenues WHERE company_id=$1 AND reference_month >= to_char(to_date($2||'-01','YYYY-MM-DD') - interval '12 months','YYYY-MM') AND reference_month < $2",[companyId,period]);
    monthlyGross=Number(current.rows[0]?.amount??0);monthlyRegular=Number(current.rows[0]?.regular_ibs_cbs_amount??0);revenue12m=Number(history.rows[0]?.gross_revenue_12m??0);regular12m=Number(history.rows[0]?.regular_ibs_cbs_12m??0);
  }
- const annualComposition=resolveSimplesNationalRevenueComposition({year:2027,grossRevenueAccrued:revenue12m,regularIbsCbsAmount:regular12m,optionModel},revenueRule.parameters as any);\n const monthlyComposition=resolveSimplesNationalRevenueComposition({year:2027,grossRevenueAccrued:monthlyGross,regularIbsCbsAmount:monthlyRegular,optionModel},revenueRule.parameters as any);\n const startupRbt12=resolveSimplesNationalStartupRbt12({period,openedAt:ownership.rows[0]?.opened_at,historicalNetRevenue:annualComposition.simplesGrossRevenue,currentNetRevenue:monthlyComposition.simplesGrossRevenue},(annexRule.parameters as any)?.rbt12_start_of_activity);\n const effectiveRevenue12m=startupRbt12.revenue12m;\n const calculated=calculateSimplesNationalBracketed2027({revenue12m:effectiveRevenue12m,monthlyRevenue:monthlyGross,regularIbsCbsRevenue12m:regular12m,regularIbsCbsMonthlyRevenue:monthlyRegular,optionModel},annexRule.parameters as any,revenueRule.parameters as any);
+ const annualComposition=resolveSimplesNationalRevenueComposition({year:2027,grossRevenueAccrued:revenue12m,regularIbsCbsAmount:regular12m,optionModel},revenueRule.parameters as any);
+ const monthlyComposition=resolveSimplesNationalRevenueComposition({year:2027,grossRevenueAccrued:monthlyGross,regularIbsCbsAmount:monthlyRegular,optionModel},revenueRule.parameters as any);
+ const startupRbt12=resolveSimplesNationalStartupRbt12({period,openedAt:ownership.rows[0]?.opened_at,historicalNetRevenue:annualComposition.simplesGrossRevenue,currentNetRevenue:monthlyComposition.simplesGrossRevenue},(annexRule.parameters as any)?.rbt12_start_of_activity);
+ const effectiveRevenue12m=startupRbt12.revenue12m;
+ const calculated=calculateSimplesNationalBracketed2027({revenue12m:effectiveRevenue12m,monthlyRevenue:monthlyGross,regularIbsCbsRevenue12m:regular12m,regularIbsCbsMonthlyRevenue:monthlyRegular,optionModel},annexRule.parameters as any,revenueRule.parameters as any);
  const input={companyId,period,annex,optionModel,revenue12m:effectiveRevenue12m,historicalRevenue12m:revenue12m,monthlyGrossRevenue:monthlyGross,regularIbsCbsRevenue12m:regular12m,regularIbsCbsMonthlyRevenue:monthlyRegular,revenueSource,fiscalDocumentCount};
  const enriched={...calculated,startOfActivityRbt12:startupRbt12,sourceOfTruth:revenueSource,fiscalDocumentCount,period,annex,ruleVersions:{
    revenueComposition:{id:revenueRule.id,code:revenueRule.rule_code,version:revenueRule.version,effectiveFrom:revenueRule.effective_from,effectiveTo:revenueRule.effective_to,sourceUrl:revenueRule.source_url,sourceReference:revenueRule.source_reference,parameters:revenueRule.parameters},
@@ -446,7 +450,8 @@ router.get("/calculation-audits/export",requireAuth,async(req,res)=>{try{
  if(format==="csv"){
    const esc=(v:unknown)=>`"${String(v??"").replace(/"/g,'""')}"`;
    const lines=["id,calculation_type,created_at,rule_version_id,rule_code,rule_version,effective_from,effective_to,source_url,source_reference,rule_parameters,input,output",...rows.map((row:any)=>[row.id,row.calculationType,row.createdAt,row.ruleVersion.id,row.ruleVersion.code,row.ruleVersion.version,row.ruleVersion.effectiveFrom,row.ruleVersion.effectiveTo,row.ruleVersion.sourceUrl,row.ruleVersion.sourceReference,JSON.stringify(row.ruleVersion.parameters),JSON.stringify(row.input),JSON.stringify(row.output)].map(esc).join(","))];
-   res.type("text/csv").set("Content-Disposition",`attachment; filename="tax-calculation-audits-${companyId}.csv"`).send(lines.join("\n")); return;
+   res.type("text/csv").set("Content-Disposition",`attachment; filename="tax-calculation-audits-${companyId}.csv"`).send(lines.join("
+")); return;
  }
  res.json({company:own.rows[0],audits:rows,limit});
 }catch{res.status(500).json({error:"failed to export calculation audits"});}});
