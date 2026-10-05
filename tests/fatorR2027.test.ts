@@ -59,7 +59,7 @@ test("2027 Fator R retains MEI to Simples provenance across the historical windo
   ]});
   assert.deepEqual(r.monthlyEvidence.map((m)=>m.evidence.regime),["mei","simples_nacional"]);
   assert.deepEqual(r.monthlyEvidence.map((m)=>m.evidence.ruleVersionId),["mei-rule-2027","sn-rule-2027"]);
-  assert.deepEqual(r.monthlyEvidence.map((m)=>m.evidence.sourceReference),["mei:2027-01","sn:2027-02"]);
+  assert.deepEqual(r.monthlyEvidence.map((m)=>m.evidence!.sourceReference),["mei:2027-01","sn:2027-02"]);
 });
 
 test("2027 Fator R rejects a startup history without monthly evidence",()=>{
