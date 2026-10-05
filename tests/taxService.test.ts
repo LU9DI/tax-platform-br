@@ -55,7 +55,7 @@ test("rule evidence stays bound to the resolved version when validity dates chan
     ruleVersion: { ...evidenceFromX.ruleVersion, effectiveTo: "2026-06-30" },
   }, ruleX), true);
   assert.equal(ruleEvidenceMatches(evidenceFromY, ruleX), false);
-}
+});
 
 const FATOR_R_RULE: FatorRRuleParameters = {
   threshold: 0.28,
