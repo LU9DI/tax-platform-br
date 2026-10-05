@@ -159,7 +159,7 @@ router.post("/simples-nacional/fator-r",requireAuth,calculationRateLimit,async(r
        periodContext={mode:"startup",priorMonths:[]};
      }else{
        const priorMonths=req.body?.priorMonths;
-       if(!Array.isArray(priorMonths)||priorMonths.length!==elapsed-1)return res.status(400).json({error:\`priorMonths must contain exactly \${Math.max(elapsed-1,0)} applicable historical month entries\`});
+       if(!Array.isArray(priorMonths)||priorMonths.length!==elapsed-1)return res.status(400).json({error:`priorMonths must contain exactly ${Math.max(elapsed-1,0)} applicable historical month entries`});
        const expectedMonths=Array.from({length:Math.max(elapsed-1,0)},(_,i)=>{const d=new Date(Date.UTC(year,month-1,1));d.setUTCMonth(d.getUTCMonth()-(elapsed-i));return {year:d.getUTCFullYear(),month:d.getUTCMonth()+1};});
        const invalidPeriod=priorMonths.some((item:any,i:number)=>Number(item?.year)!==expectedMonths[i].year||Number(item?.month)!==expectedMonths[i].month);
        if(invalidPeriod)return res.status(400).json({error:"priorMonths must identify each applicable historical month in chronological order, excluding the month immediately before the calculation period"});
