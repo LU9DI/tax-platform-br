@@ -387,16 +387,25 @@ router.post("/simples-nacional/fator-r",requireAuth,calculationRateLimit,async(r
    if(!revenueRecognitionRule)return res.status(404).json({error:"revenue recognition rule not found for requested period"});
    revenueRecognition=resolveSimplesNationalMonthlyRevenue({year,grossRevenueAccrued:req.body?.grossRevenueAccrued},revenueRecognitionRule.parameters as any);
    monthlyRevenue=revenueRecognition.monthlyRevenue;
+   // When fiscal documents exist, their classified revenue is authoritative for
+   // the actual Simples monthly calculation. The normative recognition result is
+   // retained as evidence, while the fiscal-document net revenue wins as source of truth.
+   if(fatorRevenueSource==="fiscal_documents"){
+     monthlyRevenue=Number(req.body?.monthlyRevenue??0);
+   }
  } else {
    if(!Number.isFinite(monthlyRevenue)||monthlyRevenue<0)return res.status(400).json({error:"monthlyRevenue must be a non-negative number"});
  }
  const annexOutput=calculateSimplesNationalByAnnex({revenue12m:factor.revenue12m,monthlyRevenue},annexRule.parameters as any);
  const companyId=typeof req.body?.companyId==="string"&&req.body.companyId.trim()?req.body.companyId.trim():null;
  if(!companyId)return res.status(400).json({error:"companyId is required for audited calculations"});
- const input={...factorInput,monthlyRevenue,year,month};
+ const input={...factorInput,monthlyRevenue,year,month,revenueSource:fatorRevenueSource,fiscalDocumentCount};
  const enriched={
    regime:"simples_nacional",
    calculationType:"fator_r",
+   revenueSource:fatorRevenueSource,
+   fiscalDocumentCount,
+   sourceOfTruth:fatorRevenueSource,
    period:{year,month},
    activityStartDate:activityStartDate?activityStartDate.toISOString().slice(0,10):null,
    factorR:{...factor},
