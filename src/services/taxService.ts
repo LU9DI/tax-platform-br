@@ -212,7 +212,7 @@ export function resolveSimplesNationalStartupRbt12(input: {
   return {
     applicable: true as const,
     revenue12m: Math.round(revenue12m * 100) / 100,
-    basis: (monthsSinceOpening === 1 ? "startup_first_month_annualized" : "startup_average_annualized") as const,
+    basis: monthsSinceOpening === 1 ? "startup_first_month_annualized" : "startup_average_annualized",
     monthsSinceOpening
   };
 }
