@@ -73,6 +73,15 @@ export function ruleEvidenceMatches(
   return stableJson(actualSnapshot) === stableJson(expectedSnapshot);
 }
 
+function extractMonthlyEvidence(output: unknown) {
+  if (!output || typeof output !== "object") return [];
+  const factorR = (output as Record<string, unknown>).factorR;
+  if (!factorR || typeof factorR !== "object") return [];
+  const monthlyEvidence = (factorR as Record<string, unknown>).monthlyEvidence;
+  if (!Array.isArray(monthlyEvidence)) return [];
+  return monthlyEvidence;
+}
+
 function ruleEvidenceMatchesSnapshot(
   snapshot: Record<string, unknown> | null,
   rule: { id: string; rule_code: string; version: string; parameters: unknown },
@@ -188,6 +197,28 @@ export async function recordTaxCalculation(
           [auditId, reference.id, reference.role],
         );
       }
+
+      for (const item of extractMonthlyEvidence(output)) {
+        const evidence = item && typeof item === "object" ? item as Record<string, any> : null;
+        const period = evidence?.period;
+        const ruleVersionId = evidence?.evidence?.ruleVersionId;
+        const regime = evidence?.evidence?.regime ?? evidence?.regime;
+        const sourceReference = evidence?.evidence?.sourceReference ?? evidence?.origin;
+        if (!period || !Number.isInteger(Number(period.year)) || !Number.isInteger(Number(period.month)) ||
+            Number(period.month) < 1 || Number(period.month) > 12 ||
+            typeof ruleVersionId !== "string" || !ruleVersionId ||
+            !["mei","simples_nacional"].includes(regime) ||
+            typeof sourceReference !== "string" || !sourceReference.trim()) {
+          throw new Error("invalid monthly tax evidence in calculation output");
+        }
+        await db.query(
+          `INSERT INTO tax_calculation_audit_monthly_evidence
+             (audit_id, period_year, period_month, fs, revenue, regime, source_reference, rule_version_id)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+          [auditId, Number(period.year), Number(period.month), Number(evidence.fs), Number(evidence.revenue), regime, sourceReference.trim(), ruleVersionId],
+        );
+      }
+
       await db.query("COMMIT");
       return r.rows[0];
     }
