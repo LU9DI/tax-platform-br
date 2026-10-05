@@ -32,6 +32,12 @@ CREATE INDEX IF NOT EXISTS idx_tax_fiscal_documents_company_issued ON tax_fiscal
 CREATE INDEX IF NOT EXISTS idx_tax_fiscal_documents_company_status ON tax_fiscal_documents(company_id, status, classification_status);
 CREATE INDEX IF NOT EXISTS idx_tax_fiscal_documents_rule ON tax_fiscal_documents(classification_rule_version_id);
 
+-- A fiscal document can be replaced at most once. This prevents two active rectifications
+-- from competing as the authoritative replacement for the same source document.
+CREATE UNIQUE INDEX IF NOT EXISTS uq_tax_fiscal_documents_one_rectifier
+  ON tax_fiscal_documents(supersedes_document_id)
+  WHERE supersedes_document_id IS NOT NULL;
+
 ALTER TABLE tax_revenues ADD COLUMN IF NOT EXISTS revenue_basis TEXT NOT NULL DEFAULT 'manual';
 ALTER TABLE tax_revenues ADD COLUMN IF NOT EXISTS fiscal_document_count INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE tax_revenues ADD CONSTRAINT tax_revenues_revenue_basis_check CHECK (revenue_basis IN ('manual','fiscal_documents'));
@@ -45,20 +51,39 @@ DROP TRIGGER IF EXISTS trg_tax_fiscal_documents_updated_at ON tax_fiscal_documen
 CREATE TRIGGER trg_tax_fiscal_documents_updated_at BEFORE UPDATE ON tax_fiscal_documents FOR EACH ROW EXECUTE FUNCTION tax_fiscal_documents_touch_updated_at();
 
 CREATE OR REPLACE FUNCTION tax_fiscal_documents_validate_rectification()
-RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE parent_company UUID;
+RETURNS trigger LANGUAGE plpgsql AS $
+DECLARE
+  parent_company UUID;
+  parent_status TEXT;
+  parent_rectifier UUID;
 BEGIN
-  IF NEW.supersedes_document_id IS NULL THEN RETURN NEW; END IF;
-  SELECT company_id INTO parent_company FROM tax_fiscal_documents WHERE id = NEW.supersedes_document_id;
-  IF parent_company IS NULL OR parent_company <> NEW.company_id THEN
-    RAISE EXCEPTION 'rectification source document must belong to the same company';
+  IF TG_OP = 'UPDATE' AND NEW.supersedes_document_id IS DISTINCT FROM OLD.supersedes_document_id THEN
+    RAISE EXCEPTION 'rectification source document is immutable after creation';
   END IF;
+
+  IF NEW.supersedes_document_id IS NULL THEN RETURN NEW; END IF;
+
   IF NEW.id = NEW.supersedes_document_id THEN
     RAISE EXCEPTION 'rectification source document cannot reference itself';
   END IF;
+
+  SELECT company_id, status, rectified_by_document_id
+    INTO parent_company, parent_status, parent_rectifier
+    FROM tax_fiscal_documents
+   WHERE id = NEW.supersedes_document_id
+   FOR UPDATE;
+
+  IF parent_company IS NULL OR parent_company <> NEW.company_id THEN
+    RAISE EXCEPTION 'rectification source document must belong to the same company';
+  END IF;
+
+  IF parent_status <> 'active' OR parent_rectifier IS NOT NULL THEN
+    RAISE EXCEPTION 'rectification source document must be active and not already rectified';
+  END IF;
+
   RETURN NEW;
 END;
-$$;
+$;
 
 DROP TRIGGER IF EXISTS trg_tax_fiscal_documents_rectification ON tax_fiscal_documents;
 CREATE TRIGGER trg_tax_fiscal_documents_rectification BEFORE INSERT OR UPDATE ON tax_fiscal_documents FOR EACH ROW EXECUTE FUNCTION tax_fiscal_documents_validate_rectification();
