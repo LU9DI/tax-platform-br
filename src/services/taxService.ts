@@ -484,9 +484,10 @@ export function calculateFatorR(input: FatorRInput, rule: FatorRRuleParameters, 
       factorBasis = "startup_fixed_rule";
     } else {
       if (!Array.isArray(periodContext.priorMonths)) throw new Error("priorMonths must be an array");
-      const expectedStart = Math.max(openingKey, periodKey - periodMonths);
+      const expectedStart = Math.max(openingKey, periodKey - periodMonths - 1);
+      const expectedEnd = periodKey - 2;
       const expectedKeys: number[] = [];
-      for (let key = expectedStart; key < periodKey; key++) expectedKeys.push(key);
+      for (let key = expectedStart; key <= expectedEnd; key++) expectedKeys.push(key);
       const byKey = new Map<number, FatorRHistoryMonth>();
 
       for (const item of periodContext.priorMonths) {
@@ -495,7 +496,7 @@ export function calculateFatorR(input: FatorRInput, rule: FatorRRuleParameters, 
           throw new Error("invalid Fator R history month");
         }
         const key = monthKey(item.year, item.month);
-        if (key >= periodKey) throw new Error("Fator R history cannot contain the calculation period or a future month");
+        if (key >= periodKey - 1) throw new Error("Fator R history cannot contain the month immediately before the calculation period, the calculation period, or a future month");
         if (key < openingKey) throw new Error("Fator R history cannot precede the opening month");
         if (byKey.has(key)) throw new Error("duplicate Fator R history month");
         byKey.set(key, {
