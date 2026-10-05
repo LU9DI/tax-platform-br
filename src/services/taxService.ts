@@ -177,7 +177,47 @@ export function resolveSimplesNationalRevenueComposition(input: {
   };
 }
 
-export type SimplesNationalStartupRbt12Rule = {\n  applicable_first_months: number;\n  first_month_multiplier: number;\n  subsequent_months_average_multiplier: number;\n};\n\nexport function resolveSimplesNationalStartupRbt12(input: {\n  period: string;\n  openedAt?: string | null;\n  historicalNetRevenue: number;\n  currentNetRevenue: number;\n}, rule: SimplesNationalStartupRbt12Rule) {\n  const historicalNetRevenue = finiteNonNegative(input.historicalNetRevenue, "historicalNetRevenue");\n  const currentNetRevenue = finiteNonNegative(input.currentNetRevenue, "currentNetRevenue");\n  if (!/^\\d{4}-(0[1-9]|1[0-2])$/.test(input.period)) throw new Error("invalid Simples National period");\n  if (!input.openedAt) return { applicable: false as const, revenue12m: historicalNetRevenue, basis: "normal_12_month_window" as const, monthsSinceOpening: null };\n  const opened = new Date(String(input.openedAt).slice(0, 10) + "T00:00:00Z");\n  const period = new Date(input.period + "-01T00:00:00Z");\n  if (Number.isNaN(opened.getTime()) || Number.isNaN(period.getTime())) throw new Error("invalid Simples National start-of-activity date");\n  const openedMonth = new Date(Date.UTC(opened.getUTCFullYear(), opened.getUTCMonth(), 1));\n  const periodMonth = new Date(Date.UTC(period.getUTCFullYear(), period.getUTCMonth(), 1));\n  const monthsSinceOpening = (periodMonth.getUTCFullYear() - openedMonth.getUTCFullYear()) * 12 + (periodMonth.getUTCMonth() - openedMonth.getUTCMonth()) + 1;\n  if (monthsSinceOpening <= 0 || monthsSinceOpening > Number(rule?.applicable_first_months)) {\n    return { applicable: false as const, revenue12m: historicalNetRevenue, basis: "normal_12_month_window" as const, monthsSinceOpening };\n  }\n  const firstMultiplier = finiteNonNegative(rule?.first_month_multiplier, "first_month_multiplier");\n  const averageMultiplier = finiteNonNegative(rule?.subsequent_months_average_multiplier, "subsequent_months_average_multiplier");\n  const applicableMonths = Number(rule.applicable_first_months);\n  if (!Number.isInteger(applicableMonths) || applicableMonths < 1 || firstMultiplier <= 0 || averageMultiplier <= 0) throw new Error("invalid Simples National startup RBT12 rule parameters");\n  const revenue12m = monthsSinceOpening === 1\n    ? currentNetRevenue * firstMultiplier\n    : ((historicalNetRevenue + currentNetRevenue) / monthsSinceOpening) * averageMultiplier;\n  return {\n    applicable: true as const,\n    revenue12m: Math.round(revenue12m * 100) / 100,\n    basis: (monthsSinceOpening === 1 ? "startup_first_month_annualized" : "startup_average_annualized") as const,\n    monthsSinceOpening\n  };\n}\n\nexport function calculateSimplesNationalBracketed2027(
+export type SimplesNationalStartupRbt12Rule = {
+  applicable_first_months: number;
+  first_month_multiplier: number;
+  subsequent_months_average_multiplier: number;
+};
+
+export function resolveSimplesNationalStartupRbt12(input: {
+  period: string;
+  openedAt?: string | null;
+  historicalNetRevenue: number;
+  currentNetRevenue: number;
+}, rule: SimplesNationalStartupRbt12Rule) {
+  const historicalNetRevenue = finiteNonNegative(input.historicalNetRevenue, "historicalNetRevenue");
+  const currentNetRevenue = finiteNonNegative(input.currentNetRevenue, "currentNetRevenue");
+  if (!/^\\d{4}-(0[1-9]|1[0-2])$/.test(input.period)) throw new Error("invalid Simples National period");
+  if (!input.openedAt) return { applicable: false as const, revenue12m: historicalNetRevenue, basis: "normal_12_month_window" as const, monthsSinceOpening: null };
+  const opened = new Date(String(input.openedAt).slice(0, 10) + "T00:00:00Z");
+  const period = new Date(input.period + "-01T00:00:00Z");
+  if (Number.isNaN(opened.getTime()) || Number.isNaN(period.getTime())) throw new Error("invalid Simples National start-of-activity date");
+  const openedMonth = new Date(Date.UTC(opened.getUTCFullYear(), opened.getUTCMonth(), 1));
+  const periodMonth = new Date(Date.UTC(period.getUTCFullYear(), period.getUTCMonth(), 1));
+  const monthsSinceOpening = (periodMonth.getUTCFullYear() - openedMonth.getUTCFullYear()) * 12 + (periodMonth.getUTCMonth() - openedMonth.getUTCMonth()) + 1;
+  if (monthsSinceOpening <= 0 || monthsSinceOpening > Number(rule?.applicable_first_months)) {
+    return { applicable: false as const, revenue12m: historicalNetRevenue, basis: "normal_12_month_window" as const, monthsSinceOpening };
+  }
+  const firstMultiplier = finiteNonNegative(rule?.first_month_multiplier, "first_month_multiplier");
+  const averageMultiplier = finiteNonNegative(rule?.subsequent_months_average_multiplier, "subsequent_months_average_multiplier");
+  const applicableMonths = Number(rule.applicable_first_months);
+  if (!Number.isInteger(applicableMonths) || applicableMonths < 1 || firstMultiplier <= 0 || averageMultiplier <= 0) throw new Error("invalid Simples National startup RBT12 rule parameters");
+  const revenue12m = monthsSinceOpening === 1
+    ? currentNetRevenue * firstMultiplier
+    : ((historicalNetRevenue + currentNetRevenue) / monthsSinceOpening) * averageMultiplier;
+  return {
+    applicable: true as const,
+    revenue12m: Math.round(revenue12m * 100) / 100,
+    basis: (monthsSinceOpening === 1 ? "startup_first_month_annualized" : "startup_average_annualized") as const,
+    monthsSinceOpening
+  };
+}
+
+export function calculateSimplesNationalBracketed2027(
   input: {
     revenue12m: number;
     monthlyRevenue: number;
