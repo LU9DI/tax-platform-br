@@ -54,15 +54,9 @@ export async function emitSentinelSignal(signal: Omit<SentinelSignal, "tenantId"
 }
 
 function classify(path: string, status: number) {
-  if ("tax-platform-br" === "business-automation") {
-    if (!(path.startsWith("/api/workflows") || path.startsWith("/api/webhooks"))) return null;
-  } else if ("tax-platform-br" === "ai-agent-marketplace") {
-    if (!(path.startsWith("/api/agents") || path.startsWith("/api/install") || path.startsWith("/api/reviews"))) return null;
-  } else {
-    if (!(path.startsWith("/api/tax") || path.startsWith("/api/companies") || path.startsWith("/api/revenue") || path.startsWith("/api/payments"))) return null;
-  }
+  if (!(path.startsWith("/api/tax") || path.startsWith("/api/companies") || path.startsWith("/api/revenue") || path.startsWith("/api/payments"))) return null;
   const severity = status >= 500 ? "critical" : status >= 400 ? "high" : "low";
-  const type = path.includes("/payments") || path.includes("/install") ? "transaction" : status >= 400 ? "alert" : "observation";
+  const type = path.startsWith("/api/payments") ? "transaction" : status >= 400 ? "alert" : "observation";
   return { severity, type };
 }
 
