@@ -201,6 +201,26 @@ router.post("/simples-nacional/fator-r",requireAuth,calculationRateLimit,async(r
      return res.status(400).json({error:"activityStartDate cannot be after calculation period"});
    }
  }
+ if(!activityStartDateRaw){
+   const history=req.body?.history;
+   if(!Array.isArray(history)||history.length!==12)return res.status(400).json({error:"history must contain exactly 12 monthly entries for an established Fator R calculation"});
+   const expected=Array.from({length:12},(_,i)=>{const d=new Date(Date.UTC(year,month-1,1));d.setUTCMonth(d.getUTCMonth()-(12-i));return {year:d.getUTCFullYear(),month:d.getUTCMonth()+1};});
+   if(history.some((item:any,i:number)=>Number(item?.year)!==expected[i].year||Number(item?.month)!==expected[i].month))return res.status(400).json({error:"history must contain exactly the 12 months immediately preceding the calculation period in chronological order"});
+   if(history.some((item:any)=>!item||!Number.isFinite(Number(item.fs))||Number(item.fs)<0||!Number.isFinite(Number(item.revenue))||Number(item.revenue)<0))return res.status(400).json({error:"history entries must contain non-negative numeric fs and revenue"});
+   if(history.some((item:any)=>!item.evidence||typeof item.evidence.sourceReference!=="string"||!item.evidence.sourceReference.trim()||typeof item.evidence.ruleVersionId!=="string"||!["mei","simples_nacional"].includes(item.evidence.regime)))return res.status(422).json({error:"each history entry requires monthly normative evidence: regime, sourceReference and ruleVersionId",code:"FACTOR_R_MONTHLY_EVIDENCE_REQUIRED"});
+   for(const item of history){
+     const evidenceRule=await initDb().query("SELECT id,code,effective_from,effective_to FROM tax_rules WHERE id=$1",[item.evidence.ruleVersionId]);
+     if(!evidenceRule.rowCount)return res.status(422).json({error:"monthly evidence references an unknown tax rule version",code:"FACTOR_R_EVIDENCE_RULE_NOT_FOUND"});
+     const ev=evidenceRule.rows[0];
+     const evDate=new Date(Date.UTC(Number(item.year),Number(item.month)-1,1));
+     const effectiveFrom=new Date(String(ev.effective_from)+"T00:00:00Z");
+     const effectiveTo=ev.effective_to?new Date(String(ev.effective_to)+"T00:00:00Z"):null;
+     if(evDate<effectiveFrom||(effectiveTo&&evDate>effectiveTo))return res.status(422).json({error:"monthly evidence rule is not effective for the referenced month",code:"FACTOR_R_EVIDENCE_RULE_NOT_EFFECTIVE"});
+     const expectedPrefix=item.evidence.regime==="mei"?"MEI_":"SIMPLES_NACIONAL_";
+     if(!String(ev.code).startsWith(expectedPrefix))return res.status(422).json({error:"monthly evidence rule does not match the declared regime",code:"FACTOR_R_EVIDENCE_REGIME_RULE_MISMATCH"});
+   }
+   periodContext={mode:"established",history:history.map((item:any)=>({year:Number(item.year),month:Number(item.month),fs:Number(item.fs),revenue:Number(item.revenue),regime:item.evidence.regime,origin:item.evidence.sourceReference,evidence:{regime:item.evidence.regime,sourceReference:item.evidence.sourceReference,ruleVersionId:item.evidence.ruleVersionId}}))};
+ }
  const factor=calculateFatorR(factorInput,factorRule.parameters as any,periodContext);
  const activityCnae=typeof req.body?.activityCnae==="string"&&req.body.activityCnae.trim()?req.body.activityCnae.trim():null;
  let activityClassification:any=null;
