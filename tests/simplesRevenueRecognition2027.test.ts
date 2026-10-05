@@ -29,3 +29,21 @@ test("2027 Simples rejects an incompatible recognition rule",()=>{
     /unsupported Simples Nacional revenue recognition rule/
   );
 });
+
+
+test("2027 Simples rejects the rule when fiscal-document recognition metadata is missing",()=>{
+  assert.throws(
+    ()=>resolveSimplesNationalMonthlyRevenue(
+      {year:2027,grossRevenueAccrued:1000},
+      {...RULE,fiscal_document_as_general_reference:false}
+    ),
+    /unsupported Simples Nacional revenue recognition rule/
+  );
+});
+
+test("2027 Simples rule is not applied to pre-2027 periods",()=>{
+  assert.throws(
+    ()=>resolveSimplesNationalMonthlyRevenue({year:2026,grossRevenueAccrued:1000},RULE),
+    /cannot be applied before 2027/
+  );
+});
