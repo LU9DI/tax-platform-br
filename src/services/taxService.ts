@@ -29,13 +29,20 @@ export function calculateMeiLoad(input: MeiLoadInput, rule: MeiRuleParameters) {
   const month = Number(input.month);
   if (!Number.isInteger(month) || month < 1 || month > 12) throw new Error("month must be between 1 and 12");
   const annualLimit = finiteNonNegative(rule?.annual_limit, "MEI annual limit");
+  if (annualLimit <= 0) throw new Error("MEI annual limit must be greater than zero");
   const das = finiteNonNegative(rule?.monthly_das?.[input.activity], "MEI DAS");
-  const startMonth = input.startMonth ? Math.max(1, Math.min(12, Math.floor(input.startMonth))) : 1;
+  const rawStartMonth = input.startMonth ?? 1;
+  if (!Number.isInteger(rawStartMonth) || rawStartMonth < 1 || rawStartMonth > 12) {
+    throw new Error("startMonth must be an integer between 1 and 12");
+  }
+  if (month < rawStartMonth) throw new Error("month cannot be earlier than startMonth");
+  const startMonth = rawStartMonth;
   const monthsAvailable = 13 - startMonth;
   const proportionalLimit = annualLimit * (monthsAvailable / 12);
   const referenceLimit = startMonth > 1 ? proportionalLimit : annualLimit;
-  const monthlyAverage = revenue / Math.max(1, month - startMonth + 1);
-  const projectedAnnual = monthlyAverage * Math.max(12 - startMonth + 1, 1);
+  const monthsElapsed = month - startMonth + 1;
+  const monthlyAverage = revenue / monthsElapsed;
+  const projectedAnnual = monthlyAverage * monthsAvailable;
   const remaining = Math.max(0, referenceLimit - revenue);
   const monthlySafeRevenue = Math.max(0, remaining / Math.max(1, 12 - month));
 
