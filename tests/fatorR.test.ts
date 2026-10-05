@@ -34,7 +34,7 @@ test("Fator R below 28% resolves to Anexo V",()=>{
     thirteenthSalary12m:1000,
     employerSocialSecurityContribution12m:1000,
     fgts12m:500
-  },RULE);
+  },RULE,{mode:"established",periodYear:2026,periodMonth:10});
   assert.equal(r.fs12,22500);
   assert.equal(r.factorR,0.225);
   assert.equal(r.effectiveAnnex,"V");
@@ -60,7 +60,7 @@ test("Fator R keeps the 12-month input components explicit",()=>{
     thirteenthSalary12m:2000,
     employerSocialSecurityContribution12m:10000,
     fgts12m:4000
-  },RULE);
+  },RULE,{mode:"established",periodYear:2026,periodMonth:10});
   assert.equal(r.periodMonths,12);
   assert.deepEqual(r.inputs,{
     employeeAndAvulsoRemuneration12m:30000,
