@@ -11,6 +11,7 @@ const router=Router();
 const parseLimit=(v:unknown)=>{const n=Number(v??20);return Number.isInteger(n)&&n>=1&&n<=100?n:20;};
 const parseOffset=(v:unknown)=>{const n=Number(v??0);return Number.isInteger(n)&&n>=0&&n<=100000?n:0;};
 const parseIdempotencyKey=(req:any)=>{const raw=req.header("idempotency-key");if(raw===undefined)return undefined;const key=raw.trim();if(!key||key.length>200)throw new Error("invalid idempotency key");return key;};
+const requiredFiscalHistoryMonths=(openedAt:unknown,period:string)=>{const p=new Date(period+"-01T00:00:00Z");const windowStart=new Date(p);windowStart.setUTCMonth(windowStart.getUTCMonth()-12);if(!openedAt)return 12;const opened=new Date(String(openedAt).slice(0,10)+"T00:00:00Z");if(Number.isNaN(opened.getTime()))return 12;const start=new Date(Math.max(opened.getTime(),windowStart.getTime()));start.setUTCDate(1);const months=(p.getUTCFullYear()-start.getUTCFullYear())*12+(p.getUTCMonth()-start.getUTCMonth());return Math.max(0,Math.min(12,months));};
 
 router.post("/profile",requireAuth,async(req,res)=>{try{const p=prepareTaxProfile(req.body);const id=randomUUID();await initDb().query("INSERT INTO tax_profiles (id,user_id,taxpayer_type,country,state,tax_year,data) VALUES ($1,$2,$3,$4,$5,$6,$7) ON CONFLICT(user_id,tax_year) DO UPDATE SET taxpayer_type=EXCLUDED.taxpayer_type,country=EXCLUDED.country,state=EXCLUDED.state,data=EXCLUDED.data,updated_at=now()",[id,(req as any).userId,p.taxpayerType,p.country,p.state??null,p.taxYear,JSON.stringify(req.body||{})]);res.status(201).json({id,profile:p});}catch(e){res.status(400).json({valid:false,error:e instanceof Error?e.message:"invalid tax profile"});}});
 
@@ -27,7 +28,7 @@ router.post("/mei/load",requireAuth,calculationRateLimit,async(req,res)=>{try{
  const output=calculateMeiLoad({...req.body,year},rule.parameters as any);
  const companyId=typeof req.body?.companyId==="string"&&req.body.companyId.trim()?req.body.companyId.trim():null;
  if(!companyId)return res.status(400).json({error:"companyId is required for audited calculations"});
- const ownership=await initDb().query("SELECT id FROM tax_companies WHERE id=$1 AND user_id=$2",[companyId,(req as any).userId]);
+ const ownership=await initDb().query("SELECT id,opened_at FROM tax_companies WHERE id=$1 AND user_id=$2",[companyId,(req as any).userId]);
  if(!ownership.rowCount)return res.status(403).json({error:"company not found or not owned by user"});
  const enriched={...output,ruleVersion:{id:rule.id,code:rule.rule_code,version:rule.version,effectiveFrom:rule.effective_from,effectiveTo:rule.effective_to,sourceUrl:rule.source_url,sourceReference:rule.source_reference,parameters:rule.parameters}};
  if(companyId){const audit=await recordTaxCalculation(companyId,(req as any).userId,"mei_load",req.body,enriched,rule.id,parseIdempotencyKey(req));if(!audit)return res.status(403).json({error:"company not found or not owned by user"});}
@@ -73,7 +74,7 @@ router.post("/simples-nacional/revenue-base",requireAuth,calculationRateLimit,as
    const unresolved=Number(cd.unresolved_count)+Number(hd.unresolved_count);
    if(unresolved>0)return res.status(409).json({status:"needs_review",error:"fiscal documents in the RBT12 window include documents without final classification",unresolvedFiscalDocumentCount:unresolved,revenueBasis:"fiscal_documents"});
    monthlyGross=Number(cd.gross_revenue);monthlyRegular=Number(cd.regular_ibs_cbs);revenue12m=Number(hd.gross_revenue_12m);regular12m=Number(hd.regular_ibs_cbs_12m);fiscalDocumentCount=Number(cd.document_count)+Number(hd.document_count);revenueSource="fiscal_documents";
-   if(Number(hd.covered_months)<12)return res.status(409).json({status:"needs_review",error:"fiscal document source does not cover all 12 months of the RBT12 window; a zero total cannot be treated as proof of zero activity",coveredMonths:Number(hd.covered_months),requiredMonths:12,coverageStatus:"incomplete",revenueBasis:"fiscal_documents"});
+   const requiredMonths=requiredFiscalHistoryMonths(ownership.rows[0]?.opened_at,period); if(Number(hd.covered_months)<requiredMonths)return res.status(409).json({status:"needs_review",error:"fiscal document source does not cover the required historical months of the RBT12 window; a missing month cannot be treated as proof of zero activity",coveredMonths:Number(hd.covered_months),requiredMonths,coverageStatus:"incomplete",revenueBasis:"fiscal_documents"});
  }else{
    const current=await db.query("SELECT amount,regular_ibs_cbs_amount FROM tax_revenues WHERE company_id=$1 AND reference_month=$2",[companyId,period]);
    const history=await db.query("SELECT COALESCE(SUM(amount),0)::numeric gross_revenue_12m,COALESCE(SUM(regular_ibs_cbs_amount),0)::numeric regular_ibs_cbs_12m FROM tax_revenues WHERE company_id=$1 AND reference_month >= to_char(to_date($2||'-01','YYYY-MM-DD') - interval '12 months','YYYY-MM') AND reference_month < $2",[companyId,period]);
@@ -338,7 +339,7 @@ router.post("/simples-nacional/fator-r",requireAuth,calculationRateLimit,async(r
      const historyKeys=Array.from({length:12},(_,i)=>{const d=new Date(Date.UTC(year,month-1,1));d.setUTCMonth(d.getUTCMonth()-(12-i));return key(d.getUTCFullYear(),d.getUTCMonth()+1);});
      const historyRevenue=historyKeys.reduce((sum,k)=>sum+(revenueByMonth.get(k)??0),0);
      const coveredHistory=historyKeys.filter(k=>revenueByMonth.has(k)).length;
-     if(coveredHistory<12)return res.status(409).json({status:"needs_review",error:"fiscal document source does not cover all 12 months of the Fator R RBT12 window; a zero total cannot be treated as proof of zero activity",coveredMonths:coveredHistory,requiredMonths:12,coverageStatus:"incomplete",revenueBasis:"fiscal_documents"});
+     const requiredMonths=requiredFiscalHistoryMonths(periodContext?.mode==="startup"&&periodContext.openingYear&&periodContext.openingMonth?`${periodContext.openingYear}-${String(periodContext.openingMonth).padStart(2,"0")}`:null,`${year}-${String(month).padStart(2,"0")}`); if(coveredHistory<requiredMonths)return res.status(409).json({status:"needs_review",error:"fiscal document source does not cover the required historical months of the RBT12 window; a missing month cannot be treated as proof of zero activity",coveredMonths:coveredHistory,requiredMonths,coverageStatus:"incomplete",revenueBasis:"fiscal_documents"});
      factorInput.revenue12m=historyRevenue;
      fatorRevenueSource="fiscal_documents";
      if(periodContext?.mode==="established"){
