@@ -19,6 +19,7 @@ export function signAccessToken(payload: AuthPayload) {
 }
 
 export function verifyAccessToken(token: string) {
+  requireJwtSecret();
   let last: unknown;
   for (const s of secrets()) {
     if (s.length < 32) continue;
