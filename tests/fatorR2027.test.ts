@@ -9,6 +9,9 @@ const RULE={
   fs12:{includes:[] as string[],excludes_examples:[] as string[]},
   rbt12:{basis:"12_months_antecedent_to_month_before_PA"},
   selection:{greater_or_equal_threshold:"III",below_threshold:"V"},
+  zero_both_factor:0.01,
+  zero_revenue_factor:0.28,
+  zero_fs_factor:0.01,
   startup_fixed_months:2,
   startup_fixed_factor:0.28
 } as const;
@@ -25,8 +28,8 @@ test("2027 Fator R fixes the first two startup months at 0.28",()=>{
 
 function establishedHistory(): Array<import("../src/services/taxService.js").FatorRHistoryMonth> {
   return Array.from({length:12},(_,i)=>({
-    year:2026 + Math.floor((i+3)/12),
-    month:((i+3)%12)+1,
+    year:2026 + Math.floor((i+2)/12),
+    month:((i+2)%12)+1,
     fs:28000,
     revenue:100000,
     regime:i<6?"mei":"simples_nacional",
