@@ -173,7 +173,9 @@ app.get("/api/health", async (_req, res) => {
   try {
     await initDb().query("SELECT 1");
     res.json({ ok: true, service: "tax-platform-br", database: "ok", db_latency_ms: Date.now() - started, uptime_s: Math.floor(process.uptime()) });
-  } catch {
+  } catch (error) {
+    const err = error instanceof Error ? error : new Error(String(error));
+    console.error(JSON.stringify({ event: "health.db_error", name: err.name, message: err.message, code: (error as { code?: string })?.code || null }));
     res.status(503).json({ ok: false, service: "tax-platform-br", database: "error", db_latency_ms: Date.now() - started });
   }
 });
