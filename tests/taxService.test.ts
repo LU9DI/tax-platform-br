@@ -79,7 +79,7 @@ const FACTOR_INPUT = {
   fgts12m: 0,
 };
 
-const ESTABLISHED_HISTORY = Array.from({length:12},(_,i)=>{ const key=(2026*12+9)-11+i; const year=Math.floor(key/12); const month=(key%12)+1; const regime=(i<6?"mei":"simples_nacional") as "mei"|"simples_nacional"; return {year,month,fs:28000,revenue:100000,regime,origin:`test:${year}-${String(month).padStart(2,"0")}`,evidence:{regime,sourceReference:`test:${year}-${String(month).padStart(2,"0")}`,ruleVersionId:`rule:${year}-${String(month).padStart(2,"0")}`}}; });
+const ESTABLISHED_HISTORY = Array.from({length:12},(_,i)=>{ const key=(2026*12+9)-12+i; const year=Math.floor(key/12); const month=(key%12)+1; const regime=(i<6?"mei":"simples_nacional") as "mei"|"simples_nacional"; return {year,month,fs:28000,revenue:100000,regime,origin:`test:${year}-${String(month).padStart(2,"0")}`,evidence:{regime,sourceReference:`test:${year}-${String(month).padStart(2,"0")}`,ruleVersionId:`rule:${year}-${String(month).padStart(2,"0")}`}}; });
 
 test("Fator R uses the explicit FS12/RBT12 ratio", () => {
   const r = calculateFatorR({
@@ -108,8 +108,8 @@ test("startup third month requires a complete contiguous history from opening th
     mode: "startup", periodYear: 2027, periodMonth: 3,
     openingYear: 2027, openingMonth: 1,
     priorMonths: [
-      { year: 2027, month: 1, fs: 100, revenue: 1000, regime: "mei", origin: "historical" },
-      { year: 2027, month: 2, fs: 100, revenue: 1000, regime: "simples_nacional", origin: "historical" },
+      { year: 2027, month: 1, fs: 100, revenue: 1000, regime: "mei", origin: "historical", evidence: { regime: "mei", sourceReference: "historical:2027-01", ruleVersionId: "rule:2027-01" } },
+      { year: 2027, month: 2, fs: 100, revenue: 1000, regime: "simples_nacional", origin: "historical", evidence: { regime: "simples_nacional", sourceReference: "historical:2027-02", ruleVersionId: "rule:2027-02" } },
     ]
   });
   assert.equal(r.factorNumerator, 200);
