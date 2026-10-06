@@ -51,7 +51,7 @@ DROP TRIGGER IF EXISTS trg_tax_fiscal_documents_updated_at ON tax_fiscal_documen
 CREATE TRIGGER trg_tax_fiscal_documents_updated_at BEFORE UPDATE ON tax_fiscal_documents FOR EACH ROW EXECUTE FUNCTION tax_fiscal_documents_touch_updated_at();
 
 CREATE OR REPLACE FUNCTION tax_fiscal_documents_validate_rectification()
-RETURNS trigger LANGUAGE plpgsql AS $
+RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE
   parent_company UUID;
   parent_status TEXT;
@@ -85,6 +85,7 @@ BEGIN
 END;
 $;
 
+$$;
 DROP TRIGGER IF EXISTS trg_tax_fiscal_documents_rectification ON tax_fiscal_documents;
 CREATE TRIGGER trg_tax_fiscal_documents_rectification BEFORE INSERT OR UPDATE ON tax_fiscal_documents FOR EACH ROW EXECUTE FUNCTION tax_fiscal_documents_validate_rectification();
 
