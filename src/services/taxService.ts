@@ -742,10 +742,13 @@ export function calculateFatorR(input: FatorRInput, rule: FatorRRuleParameters, 
         !["mei", "simples_nacional"].includes(item.evidence.regime))) {
       throw new Error("Fator R history requires monthly normative evidence for every month");
     }
-    // In established mode, the validated 12-month history is the authoritative
-    // FS12/RBT12 calculation basis; explicit inputs remain authoritative elsewhere.
-    factorNumerator = monthsUsed.reduce((sum, item) => sum + item.fs, 0);
-    factorDenominator = monthsUsed.reduce((sum, item) => sum + item.revenue, 0);
+    // From 2027 onward, the validated 12-month history is the authoritative
+    // FS12/RBT12 basis. Legacy/pre-2027 calculations retain the explicit
+    // resolved FS12/RBT12 inputs while still validating the historical window.
+    if (periodContext.periodYear >= 2027) {
+      factorNumerator = monthsUsed.reduce((sum, item) => sum + item.fs, 0);
+      factorDenominator = monthsUsed.reduce((sum, item) => sum + item.revenue, 0);
+    }
     factorBasis = "FS12_RBT12";
     windowStart = `${monthsUsed[0].year}-${String(monthsUsed[0].month).padStart(2, "0")}`;
     windowEnd = `${monthsUsed[monthsUsed.length - 1].year}-${String(monthsUsed[monthsUsed.length - 1].month).padStart(2, "0")}`;
