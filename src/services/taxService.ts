@@ -191,7 +191,7 @@ export function resolveSimplesNationalStartupRbt12(input: {
 }, rule: SimplesNationalStartupRbt12Rule) {
   const historicalNetRevenue = finiteNonNegative(input.historicalNetRevenue, "historicalNetRevenue");
   const currentNetRevenue = finiteNonNegative(input.currentNetRevenue, "currentNetRevenue");
-  if (!/^\\d{4}-(0[1-9]|1[0-2])$/.test(input.period)) throw new Error("invalid Simples National period");
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(input.period)) throw new Error("invalid Simples National period");
   if (!input.openedAt) return { applicable: false as const, revenue12m: historicalNetRevenue, basis: "normal_12_month_window" as const, monthsSinceOpening: null };
   const opened = new Date(String(input.openedAt).slice(0, 10) + "T00:00:00Z");
   const period = new Date(input.period + "-01T00:00:00Z");
@@ -657,7 +657,6 @@ export function calculateFatorR(input: FatorRInput, rule: FatorRRuleParameters, 
     } else {
       if (!Array.isArray(periodContext.priorMonths)) throw new Error("priorMonths must be an array");
       const usesAntecedentToPreviousMonth =
-        periodContext.periodYear >= 2027 &&
         (rule.rbt12 as { basis?: unknown } | undefined)?.basis ===
           "12_months_antecedent_to_month_before_PA";
       const expectedStart = Math.max(openingKey, periodKey - periodMonths - 1);
@@ -693,7 +692,7 @@ export function calculateFatorR(input: FatorRInput, rule: FatorRRuleParameters, 
       }
 
       monthsUsed = expectedKeys.map((key) => byKey.get(key)!);
-      if (monthsUsed.some((item) => !item.evidence || !item.evidence.sourceReference || !item.evidence.ruleVersionId ||
+      if (periodContext.periodYear >= 2027 && monthsUsed.some((item) => !item.evidence || !item.evidence.sourceReference || !item.evidence.ruleVersionId ||
           !["mei", "simples_nacional"].includes(item.evidence.regime))) {
         throw new Error("Fator R history requires monthly normative evidence for every month");
       }
