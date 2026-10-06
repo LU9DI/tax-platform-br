@@ -742,8 +742,8 @@ export function calculateFatorR(input: FatorRInput, rule: FatorRRuleParameters, 
         !["mei", "simples_nacional"].includes(item.evidence.regime))) {
       throw new Error("Fator R history requires monthly normative evidence for every month");
     }
-    factorNumerator = monthsUsed.reduce((sum, item) => sum + item.fs, 0);
-    factorDenominator = monthsUsed.reduce((sum, item) => sum + item.revenue, 0);
+    // The explicit FS12/RBT12 inputs are the resolved calculation basis.
+    // The monthly window is retained for completeness and provenance checks.
     factorBasis = "FS12_RBT12";
     windowStart = `${monthsUsed[0].year}-${String(monthsUsed[0].month).padStart(2, "0")}`;
     windowEnd = `${monthsUsed[monthsUsed.length - 1].year}-${String(monthsUsed[monthsUsed.length - 1].month).padStart(2, "0")}`;
