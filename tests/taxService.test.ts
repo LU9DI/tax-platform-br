@@ -211,6 +211,19 @@ test("2027 fiscal RBT12 and Fator R can consume the same net revenue basis", () 
   const fiscalGrossByMonth = Array.from({length:12}, () => 10000);
   const regularIbsCbsByMonth = Array.from({length:12}, () => 1000);
   const rbt12 = fiscalGrossByMonth.reduce((sum, value, index) => sum + value - regularIbsCbsByMonth[index], 0);
+  const establishedHistory2027 = Array.from({ length: 12 }, (_, i) => ({
+    year: 2026,
+    month: i + 1,
+    fs: 2340,
+    revenue: 9000,
+    regime: (i < 6 ? "mei" : "simples_nacional") as "mei" | "simples_nacional",
+    origin: `test:2027-${String(i + 1).padStart(2, "0")}`,
+    evidence: {
+      regime: (i < 6 ? "mei" : "simples_nacional") as "mei" | "simples_nacional",
+      sourceReference: `test:2027-${String(i + 1).padStart(2, "0")}`,
+      ruleVersionId: `rule:2027-${String(i + 1).padStart(2, "0")}`
+    }
+  }));
   const fator = calculateFatorR({
     ...FACTOR_INPUT,
     revenue12m: rbt12,
@@ -219,7 +232,7 @@ test("2027 fiscal RBT12 and Fator R can consume the same net revenue basis", () 
     mode: "established",
     periodYear: 2027,
     periodMonth: 1,
-    history: ESTABLISHED_HISTORY
+    history: establishedHistory2027
   });
 
   assert.equal(rbt12, 108000);
