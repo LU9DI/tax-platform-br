@@ -8,10 +8,13 @@ const RULE={
   ratio:"FS12/RBT12" as const,
   fs12:{includes:["employee_and_avulso_remuneration","individual_contributor_remuneration","13th_salary","employer_social_security_contribution","FGTS"],excludes_examples:["rent","profit_distribution","intern_payments","MEI_payments"]},
   rbt12:{basis:"revenue_accrued_in_the_12_months_before_calculation_period"},
-  selection:{greater_or_equal_threshold:"III" as const,below_threshold:"V" as const}
+  selection:{greater_or_equal_threshold:"III" as const,below_threshold:"V" as const},
+  zero_both_factor:0.01,
+  zero_revenue_factor:0.28,
+  zero_fs_factor:0.01
 };
 
-const ESTABLISHED_HISTORY = Array.from({length:12},(_,i)=>{ const key=(2026*12+9)-11+i; const year=Math.floor(key/12); const month=(key%12)+1; const regime=(i<6?"mei":"simples_nacional") as "mei"|"simples_nacional"; return {year,month,fs:28000,revenue:100000,regime,origin:`test:${year}-${String(month).padStart(2,"0")}`,evidence:{regime,sourceReference:`test:${year}-${String(month).padStart(2,"0")}`,ruleVersionId:`rule:${year}-${String(month).padStart(2,"0")}`}}; });
+const ESTABLISHED_HISTORY = Array.from({length:12},(_,i)=>{ const key=(2026*12+9)-12+i; const year=Math.floor(key/12); const month=(key%12)+1; const regime=(i<6?"mei":"simples_nacional") as "mei"|"simples_nacional"; return {year,month,fs:28000,revenue:100000,regime,origin:`test:${year}-${String(month).padStart(2,"0")}`,evidence:{regime,sourceReference:`test:${year}-${String(month).padStart(2,"0")}`,ruleVersionId:`rule:${year}-${String(month).padStart(2,"0")}`}}; });
 
 test("Fator R at 28% resolves to Anexo III",()=>{
   const r=calculateFatorR({
