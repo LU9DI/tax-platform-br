@@ -127,6 +127,22 @@ try {
   await client.query("CREATE TABLE IF NOT EXISTS schema_migrations (version text PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now())");
   await client.query("SELECT pg_advisory_lock(hashtext('application_migrations'))");
 
+  // Bootstrap the immutable application baseline before applying incremental
+  // migrations. A fresh database (such as a new Neon project) has no legacy
+  // schema, while historical migrations may safely assume these base tables
+  // already exist. The baseline itself is idempotent.
+  const schemaFile = join(dirname(fileURLToPath(import.meta.url)), "../src/db/schema.sql");
+  const baselineSql = await readFile(schemaFile, "utf8");
+  await client.query("BEGIN");
+  try {
+    await client.query(baselineSql);
+    await client.query("COMMIT");
+    console.log("database baseline schema applied");
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  }
+
   for (const file of files) {
     const version = file.replace(/\.sql$/, "");
     const applied = await client.query("SELECT 1 FROM schema_migrations WHERE version=$1", [version]);
@@ -153,7 +169,7 @@ try {
   console.log(`database integrity verified: ${files.length} migrations; current tax rules valid`);
 } catch (error) {
   console.error("database migration/integrity check failed", error);
-  process.exitCode = 1;
+  throw error;
 } finally {
   await client.query("SELECT pg_advisory_unlock(hashtext('application_migrations'))").catch(() => {});
   client.release();
