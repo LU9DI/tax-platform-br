@@ -22,7 +22,7 @@ router.post("/profile/validate",requireAuth,(req,res)=>{try{res.json({valid:true
 router.post("/mei/load",requireAuth,calculationRateLimit,async(req,res)=>{try{
  const year=Number(req.body?.year??new Date().getUTCFullYear());
  const month=Number(req.body?.month??1);
- const ruleCode=typeof req.body?.ruleCode==="string"&&req.body.ruleCode.trim()?req.body.ruleCode.trim():"MEI_2026";
+ const ruleCode=typeof req.body?.ruleCode==="string"&&req.body.ruleCode.trim()?req.body.ruleCode.trim():`MEI_${year}`;
  const rule=await getEffectiveTaxRule(ruleCode,new Date(Date.UTC(year,month-1,1)));
  if(!rule)return res.status(404).json({error:"tax rule not found for requested period"});
  const output=calculateMeiLoad({...req.body,year},rule.parameters as any);
@@ -37,7 +37,7 @@ router.post("/mei/load",requireAuth,calculationRateLimit,async(req,res)=>{try{
 
 router.post("/simulate/consumption-transition",requireAuth,calculationRateLimit,async(req,res)=>{try{
  const input={base:Number(req.body?.base),year:Number(req.body?.year)};
- const ruleCode=typeof req.body?.ruleCode==="string"&&req.body.ruleCode.trim()?req.body.ruleCode.trim():"RTC_CONSUMPTION_2026";
+ const ruleCode=typeof req.body?.ruleCode==="string"&&req.body.ruleCode.trim()?req.body.ruleCode.trim():`RTC_CONSUMPTION_${input.year}`;
  const rule=await getEffectiveTaxRule(ruleCode,new Date(Date.UTC(input.year,0,1)));
  if(!rule)return res.status(404).json({error:"tax rule not found for requested year"});
  const output=simulateConsumptionTransition(input,rule.parameters as any);
