@@ -7,7 +7,7 @@ import { initDb } from "../core/db.js";
 import { requireAuth } from "../middleware/auth.js";
 import { calculationRateLimit } from "../middleware/calculationRateLimit.js";
 import { recordTaxCalculation, getEffectiveTaxRule } from "../services/taxAuditService.js";
-import { meiRuleCode, consumptionTransitionRuleCode, isValidTaxYear, isValidTaxMonth } from "../domain/taxRuleDefaults.js";
+import { meiRuleCode, consumptionTransitionRuleCode, isValidTaxYear, isValidTaxMonth, parseNonNegativeFiniteNumber } from "../domain/taxRuleDefaults.js";
 const router=Router();
 const parseLimit=(v:unknown)=>{const n=Number(v??20);return Number.isInteger(n)&&n>=1&&n<=100?n:20;};
 const parseOffset=(v:unknown)=>{const n=Number(v??0);return Number.isInteger(n)&&n>=0&&n<=100000?n:0;};
@@ -39,9 +39,11 @@ router.post("/mei/load",requireAuth,calculationRateLimit,async(req,res)=>{try{
 }catch(e){if(e instanceof Error && (e as Error & {code?:string}).code==="IDEMPOTENCY_CONFLICT")return res.status(409).json({error:e.message});if(e instanceof Error && (e as Error & {code?:string}).code==="54000")return res.status(429).json({error:e.message});res.status(400).json({error:e instanceof Error?e.message:"invalid MEI data"});}});
 
 router.post("/simulate/consumption-transition",requireAuth,calculationRateLimit,async(req,res)=>{try{
- const input={base:Number(req.body?.base),year:Number(req.body?.year)};
- if(!isValidTaxYear(input.year))return res.status(400).json({error:"year must be an integer between 2020 and 2100"});
- if(!Number.isFinite(input.base)||input.base<0)return res.status(400).json({error:"base must be a non-negative number"});
+ const year=Number(req.body?.year);
+ const base=parseNonNegativeFiniteNumber(req.body?.base);
+ if(!isValidTaxYear(year))return res.status(400).json({error:"year must be an integer between 2020 and 2100"});
+ if(!base.valid)return res.status(400).json({error:"base must be a non-negative number"});
+ const input={base:base.value,year};
  const ruleCode=consumptionTransitionRuleCode(input.year, req.body?.ruleCode);
  const rule=await getEffectiveTaxRule(ruleCode,new Date(Date.UTC(input.year,0,1)));
  if(!rule)return res.status(404).json({error:"tax rule not found for requested year"});
