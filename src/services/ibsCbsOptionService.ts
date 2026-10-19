@@ -96,8 +96,11 @@ async function eventHistory(
   return result.rows as EventRow[];
 }
 
-function deriveSemesterState(history: EventRow[]) {
-  let model: Model = "simples_puro";
+// `initialModel` is the model in force when the cycle opens. For the second semester
+// it is the first-semester outcome: a renunciation only makes sense for a company
+// that enters the cycle on the hybrid model.
+function deriveSemesterState(history: EventRow[], initialModel: Model = "simples_puro") {
+  let model: Model = initialModel;
   let terminal = false;
 
   for (const event of history) {
@@ -125,6 +128,9 @@ function deriveSemesterState(history: EventRow[]) {
       if (model !== "simples_hibrido" && model !== "simples_puro") {
         throw new Error("IBS/CBS cancellation has an invalid state");
       }
+      // Cancelling an election reverts the cycle to the default (pure) model; the
+      // second-semester caller re-applies the prior-semester model afterwards.
+      model = "simples_puro";
       terminal = true;
       continue;
     }
@@ -152,7 +158,6 @@ export async function getEffectiveIbsCbsOption(
   const currentHistory = await eventHistory(db, companyId, effectiveFrom, effectiveTo, decisionAt);
 
   const priorState = priorHistory.length ? deriveSemesterState(priorHistory) : { model: "simples_puro" as Model, terminal: false };
-  const currentState = currentHistory.length ? deriveSemesterState(currentHistory) : { model: "simples_puro" as Model, terminal: false };
 
   const previousSemesterModel =
     semester === "second" && priorState.model === "simples_hibrido"
@@ -160,6 +165,10 @@ export async function getEffectiveIbsCbsOption(
       : semester === "second"
         ? ("simples_puro" as const)
         : undefined;
+
+  const currentState = currentHistory.length
+    ? deriveSemesterState(currentHistory, previousSemesterModel ?? "simples_puro")
+    : { model: "simples_puro" as Model, terminal: false };
 
   let model: Model = currentState.model;
   if (semester === "second" && !currentHistory.length) {
@@ -204,7 +213,19 @@ export async function recordIbsCbsOptionEvent(input: {
 
   const now = input.now ?? new Date();
   const history = await eventHistory(db, input.companyId, effectiveFrom, effectiveTo, now);
-  const state = history.length ? deriveSemesterState(history) : { model: "simples_puro" as Model, terminal: false };
+
+  // A retry of the event already on record is an idempotent replay, not a new decision.
+  const lastEvent = history.at(-1);
+  if (lastEvent && lastEvent.event_type === input.eventType) return lastEvent.id;
+
+  let initialModel: Model = "simples_puro";
+  if (semester === "second") {
+    const priorForState = await eventHistory(db, input.companyId, "2027-01-01", "2027-06-30", now);
+    if (priorForState.length && deriveSemesterState(priorForState).model === "simples_hibrido") {
+      initialModel = "simples_hibrido";
+    }
+  }
+  const state = history.length ? deriveSemesterState(history, initialModel) : { model: initialModel, terminal: false };
 
   if (state.terminal) {
     throw new Error("IBS/CBS option cycle is already terminal");
