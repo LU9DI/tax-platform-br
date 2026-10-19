@@ -37,7 +37,7 @@ test("validates supported fiscal years and months", async () => {
 test("rejects blank or malformed numeric bases and accepts zero", () => {
   assert.deepEqual(parseNonNegativeFiniteNumber(0), { valid: true, value: 0 });
   assert.deepEqual(parseNonNegativeFiniteNumber("12.5"), { valid: true, value: 12.5 });
-  for (const value of ["", "   ", "\\t\\n", null, undefined, true, -1, Infinity, NaN, "nope", [], {}]) {
+  for (const value of ["", "   ", "\t\n", "0x10", "0b10", null, undefined, true, -1, Infinity, NaN, "nope", [], {}]) {
     assert.deepEqual(parseNonNegativeFiniteNumber(value), { valid: false });
   }
 });
