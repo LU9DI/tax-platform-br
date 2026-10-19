@@ -1,1 +1,7 @@
-node_modules/\ndist/\n.env\n.env.*\n!.env.example\ncoverage/\n*.log\n
+node_modules/
+dist/
+.env
+.env.*
+!.env.example
+coverage/
+*.log
