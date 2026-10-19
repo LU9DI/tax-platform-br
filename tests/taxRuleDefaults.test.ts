@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { meiRuleCode, consumptionTransitionRuleCode } from "../src/domain/taxRuleDefaults.js";
+import { meiRuleCode, consumptionTransitionRuleCode, isValidTaxYear, isValidTaxMonth, parseNonNegativeFiniteNumber } from "../src/domain/taxRuleDefaults.js";
 
 test("MEI default rule follows the requested fiscal year", () => {
   assert.equal(meiRuleCode(2026), "MEI_2026");
@@ -23,7 +23,6 @@ test("blank explicit rule code uses the requested year", () => {
 });
 
 test("validates supported fiscal years and months", async () => {
-  const { isValidTaxYear, isValidTaxMonth } = await import("../src/domain/taxRuleDefaults.js");
   assert.equal(isValidTaxYear(2026), true);
   assert.equal(isValidTaxYear(2019), false);
   assert.equal(isValidTaxYear(2101), false);
@@ -33,4 +32,12 @@ test("validates supported fiscal years and months", async () => {
   assert.equal(isValidTaxMonth(0), false);
   assert.equal(isValidTaxMonth(13), false);
   assert.equal(isValidTaxMonth(1.5), false);
+});
+
+test("rejects blank or malformed numeric bases and accepts zero", () => {
+  assert.deepEqual(parseNonNegativeFiniteNumber(0), { valid: true, value: 0 });
+  assert.deepEqual(parseNonNegativeFiniteNumber("12.5"), { valid: true, value: 12.5 });
+  for (const value of ["", "   ", "\\t\\n", null, undefined, true, -1, Infinity, NaN, "nope", [], {}]) {
+    assert.deepEqual(parseNonNegativeFiniteNumber(value), { valid: false });
+  }
 });
