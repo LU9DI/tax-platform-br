@@ -7,6 +7,7 @@ import { initDb } from "../core/db.js";
 import { requireAuth } from "../middleware/auth.js";
 import { calculationRateLimit } from "../middleware/calculationRateLimit.js";
 import { recordTaxCalculation, getEffectiveTaxRule } from "../services/taxAuditService.js";
+import { meiRuleCode, consumptionTransitionRuleCode } from "../domain/taxRuleDefaults.js";
 const router=Router();
 const parseLimit=(v:unknown)=>{const n=Number(v??20);return Number.isInteger(n)&&n>=1&&n<=100?n:20;};
 const parseOffset=(v:unknown)=>{const n=Number(v??0);return Number.isInteger(n)&&n>=0&&n<=100000?n:0;};
