@@ -80,7 +80,9 @@ test("fiscal rectification removes the original document from the active RBT12 s
            13000,13000,1300,'active',$4,$5,'ci_test',$6,$7)`,
         [randomUUID(), companyId, `CI-DUP-${originalId}`, classification.status, classification.ruleId, `CI-DUP-${originalId}`, originalId]
       ),
-      /duplicate key|unique constraint|already exists/i
+      // The rectification trigger rejects a second replacement before the unique index is
+      // reached; either guard is an acceptable (and sufficient) rejection.
+      /already rectified|duplicate key|unique constraint|already exists/i
     );
 
     await assert.rejects(

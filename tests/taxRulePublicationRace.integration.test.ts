@@ -12,6 +12,9 @@ test(
     const pool = new pg.Pool({ connectionString: databaseUrl });
     const resolver = await pool.connect();
     const publisher = await pool.connect();
+    // Publication in this test is committed on purpose (it races the resolver), so it must be
+    // undone afterwards or the suite stops being re-runnable against the same database.
+    let cleanup: { ruleXId: string; originalEffectiveTo: string; ruleYId: string } | null = null;
 
     try {
       const seed = await resolver.query(`
@@ -37,6 +40,7 @@ test(
       const yId = randomUUID();
       const auditId = randomUUID();
       const idempotencyKey = `rule-race-test-${randomUUID()}`;
+      cleanup = { ruleXId: x.rule_x_id, originalEffectiveTo: x.effective_to, ruleYId: yId };
       const xEffectiveTo = new Date(`${x.effective_to}T00:00:00Z`);
       const yEffectiveFrom = new Date(xEffectiveTo.getTime() + 24 * 60 * 60 * 1000);
       const versionMatch = String(x.version).match(/^(.*?)(\\d+)$/);
@@ -67,7 +71,7 @@ test(
         `INSERT INTO tax_rules
           (id, code, version, active, effective_from, effective_to,
            tax_year, name, source_url, source_reference, parameters)
-         VALUES ($1,$2,$3,true,$4,$5,$6,$7,$8,$9,$10,$11)`,
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
         [
           yId, x.code, nextVersion, true,
           yEffectiveFrom, null, x.tax_year,
@@ -119,6 +123,10 @@ test(
     } finally {
       await publisher.query("ROLLBACK").catch(() => undefined);
       await resolver.query("ROLLBACK").catch(() => undefined);
+      if (cleanup) {
+        await pool.query("DELETE FROM tax_rules WHERE id=$1", [cleanup.ruleYId]);
+        await pool.query("UPDATE tax_rules SET effective_to=$1 WHERE id=$2", [cleanup.originalEffectiveTo, cleanup.ruleXId]);
+      }
       publisher.release();
       resolver.release();
       await pool.end();
