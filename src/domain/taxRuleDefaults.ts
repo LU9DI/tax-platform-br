@@ -13,3 +13,14 @@ export function isValidTaxYear(year: number): boolean {
 export function isValidTaxMonth(month: number): boolean {
   return Number.isInteger(month) && month >= 1 && month <= 12;
 }
+
+export type NonNegativeNumberResult = { valid: true; value: number } | { valid: false };
+
+export function parseNonNegativeFiniteNumber(value: unknown): NonNegativeNumberResult {
+  if (typeof value === "boolean" || value === null || value === undefined) return { valid: false };
+  if (typeof value === "string" && value.trim() === "") return { valid: false };
+  if (typeof value !== "number" && typeof value !== "string") return { valid: false };
+  const parsed = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(parsed) || parsed < 0) return { valid: false };
+  return { valid: true, value: parsed };
+}
