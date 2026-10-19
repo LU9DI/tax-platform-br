@@ -20,6 +20,7 @@ export function parseNonNegativeFiniteNumber(value: unknown): NonNegativeNumberR
   if (typeof value === "boolean" || value === null || value === undefined) return { valid: false };
   if (typeof value === "string" && value.trim() === "") return { valid: false };
   if (typeof value !== "number" && typeof value !== "string") return { valid: false };
+  if (typeof value === "string" && !/^[+]?(?:\\d+(?:\\.\\d*)?|\\.\\d+)(?:[eE][+-]?\\d+)?$/.test(value.trim())) return { valid: false };
   const parsed = typeof value === "number" ? value : Number(value);
   if (!Number.isFinite(parsed) || parsed < 0) return { valid: false };
   return { valid: true, value: parsed };
