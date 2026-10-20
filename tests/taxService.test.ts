@@ -293,7 +293,7 @@ test("MEI projection uses elapsed months and remaining months from the activity 
   const rule = { annual_limit: 81000, monthly_das: { services: 86.05, commerce: 82.05, commerce_services: 87.05 } };
   const r = calculateMeiLoad({ revenueYearToDate: 10000, month: 4, activity: "services", startMonth: 3, year: 2026 }, rule);
   assert.equal(r.annualLimit, 67500);
-  assert.equal(r.projectedAnnualRevenue, 60000);
+  assert.equal(r.projectedAnnualRevenue, 50000); // 10.000 em 2 meses = 5.000/mês x 10 meses de atividade (mar-dez), comparável ao limite proporcional de 67.500
   assert.equal(r.remainingLimit, 57500);
   assert.equal(r.referenceYear, 2026);
 });
