@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  calculateMeiLoad,
   simulateConsumptionTransition,
   resolveSimplesNationalRevenueComposition,
   resolveSimplesNationalStartupRbt12,
@@ -278,4 +279,21 @@ test("2027 startup RBT12 stops proportionalization after the first 12 months", (
   assert.equal(r.monthsSinceOpening, 13);
   assert.equal(r.revenue12m, 132000);
   assert.equal(r.basis, "normal_12_month_window");
+});
+
+test("MEI validates start month and avoids invalid annual-limit arithmetic", () => {
+  const rule = { annual_limit: 81000, monthly_das: { services: 86.05, commerce: 82.05, commerce_services: 87.05 } };
+  assert.throws(() => calculateMeiLoad({ revenueYearToDate: 1000, month: 3, activity: "services", startMonth: 0 }, rule), /startMonth must be an integer/);
+  assert.throws(() => calculateMeiLoad({ revenueYearToDate: 1000, month: 3, activity: "services", startMonth: 13 }, rule), /startMonth must be an integer/);
+  assert.throws(() => calculateMeiLoad({ revenueYearToDate: 1000, month: 2, activity: "services", startMonth: 3 }, rule), /month cannot be earlier/);
+  assert.throws(() => calculateMeiLoad({ revenueYearToDate: 1000, month: 1, activity: "services" }, { ...rule, annual_limit: 0 }), /annual limit must be greater than zero/);
+});
+
+test("MEI projection uses elapsed months and remaining months from the activity start", () => {
+  const rule = { annual_limit: 81000, monthly_das: { services: 86.05, commerce: 82.05, commerce_services: 87.05 } };
+  const r = calculateMeiLoad({ revenueYearToDate: 10000, month: 4, activity: "services", startMonth: 3, year: 2026 }, rule);
+  assert.equal(r.annualLimit, 67500);
+  assert.equal(r.projectedAnnualRevenue, 50000); // 10.000 em 2 meses = 5.000/mês x 10 meses de atividade (mar-dez), comparável ao limite proporcional de 67.500
+  assert.equal(r.remainingLimit, 57500);
+  assert.equal(r.referenceYear, 2026);
 });
