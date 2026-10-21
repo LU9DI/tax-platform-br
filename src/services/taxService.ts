@@ -18,6 +18,39 @@ export type MeiRuleParameters = {
   monthly_das: Record<MeiLoadInput["activity"], number>;
 };
 
+const MEI_ACTIVITIES = ["services", "commerce", "commerce_services"] as const;
+
+function plainObject(value: unknown, name: string): Record<string, unknown> {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error(`invalid MEI rule: ${name} must be an object`);
+  }
+  return value as Record<string, unknown>;
+}
+
+function positiveNumber(value: unknown, name: string) {
+  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
+    throw new Error(`invalid MEI rule: ${name} must be a positive number`);
+  }
+  return value;
+}
+
+/**
+ * Validates the stored `tax_rules.parameters` of a MEI rule at the boundary, so the calculation never
+ * receives an unchecked shape. Only the fields consumed by `calculateMeiLoad` are returned; other stored
+ * fields (inss, tax_components, proportional_limit_basis, transport_cargas_supported) are informational
+ * and do not influence the result.
+ */
+export function parseMeiRule(parameters: unknown): MeiRuleParameters {
+  const p = plainObject(parameters, "parameters");
+  const das = plainObject(p.monthly_das, "monthly_das");
+  return {
+    annual_limit: positiveNumber(p.annual_limit, "annual_limit"),
+    monthly_das: Object.fromEntries(
+      MEI_ACTIVITIES.map((activity) => [activity, positiveNumber(das[activity], `monthly_das.${activity}`)])
+    ) as MeiRuleParameters["monthly_das"]
+  };
+}
+
 function finiteNonNegative(value: unknown, name: string) {
   const n = Number(value);
   if (!Number.isFinite(n) || n < 0) throw new Error(`${name} must be a non-negative number`);
