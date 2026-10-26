@@ -219,7 +219,18 @@ export async function recordIbsCbsOptionEvent(input: {
     (event) => event.event_type === input.eventType && new Date(event.occurred_at).getTime() === requestedAt,
   );
   if (existingSameEvent) return existingSameEvent.id;
-  const state = history.length ? deriveSemesterState(history) : { model: "simples_puro" as Model, terminal: false };
+  const priorHistory =
+    semester === "second"
+      ? await eventHistory(db, input.companyId, "2027-01-01", "2027-06-30", now)
+      : [];
+  const priorState = priorHistory.length ? deriveSemesterState(priorHistory) : { model: "simples_puro" as Model, terminal: false };
+  const initialModel: Model =
+    semester === "second" && priorState.model === "simples_hibrido"
+      ? "simples_hibrido"
+      : "simples_puro";
+  const state = history.length
+    ? deriveSemesterState(history, initialModel)
+    : { model: initialModel, terminal: false };
 
   if (state.terminal) {
     throw new Error("IBS/CBS option cycle is already terminal");
@@ -228,8 +239,6 @@ export async function recordIbsCbsOptionEvent(input: {
   if (input.eventType === "elected") {
     if (history.length) throw new Error("IBS/CBS option cycle already has a decision");
     if (semester === "second") {
-      const prior = await eventHistory(db, input.companyId, "2027-01-01", "2027-06-30", now);
-      const priorState = prior.length ? deriveSemesterState(prior) : { model: "simples_puro" as Model, terminal: false };
       if (priorState.model === "simples_hibrido") {
         throw new Error("second-semester election is unavailable while first-semester hybrid option remains active");
       }
@@ -252,8 +261,6 @@ export async function recordIbsCbsOptionEvent(input: {
       throw new Error("IBS/CBS renunciation window is not available");
     }
     if (history.length) throw new Error("IBS/CBS second-semester option cycle already has a decision");
-    const prior = await eventHistory(db, input.companyId, "2027-01-01", "2027-06-30", now);
-    const priorState = prior.length ? deriveSemesterState(prior) : { model: "simples_puro" as Model, terminal: false };
     if (priorState.model !== "simples_hibrido") {
       throw new Error("IBS/CBS renunciation requires an active first-semester hybrid option");
     }
