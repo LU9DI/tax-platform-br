@@ -206,8 +206,12 @@ export async function recordIbsCbsOptionEvent(input: {
 
   const now = input.now ?? new Date();
   const history = await eventHistory(db, input.companyId, effectiveFrom, effectiveTo, now);
-  // Make retries idempotent for the same event type within the semester cycle.
-  const existingSameEvent = history.find((event) => event.event_type === input.eventType);
+  // A retry of the exact same event at the same timestamp returns the persisted id.
+  // A later election/cancellation must still pass through the state machine.
+  const requestedAt = now.getTime();
+  const existingSameEvent = history.find(
+    (event) => event.event_type === input.eventType && new Date(event.occurred_at).getTime() === requestedAt,
+  );
   if (existingSameEvent) return existingSameEvent.id;
   const state = history.length ? deriveSemesterState(history) : { model: "simples_puro" as Model, terminal: false };
 
