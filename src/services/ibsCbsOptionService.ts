@@ -125,6 +125,8 @@ function deriveSemesterState(history: EventRow[]) {
       if (model !== "simples_hibrido" && model !== "simples_puro") {
         throw new Error("IBS/CBS cancellation has an invalid state");
       }
+      // Cancellation returns the selected semester to the pure model.
+      model = "simples_puro";
       terminal = true;
       continue;
     }
@@ -204,6 +206,9 @@ export async function recordIbsCbsOptionEvent(input: {
 
   const now = input.now ?? new Date();
   const history = await eventHistory(db, input.companyId, effectiveFrom, effectiveTo, now);
+  // Make retries idempotent for the same event type within the semester cycle.
+  const existingSameEvent = history.find((event) => event.event_type === input.eventType);
+  if (existingSameEvent) return existingSameEvent.id;
   const state = history.length ? deriveSemesterState(history) : { model: "simples_puro" as Model, terminal: false };
 
   if (state.terminal) {
