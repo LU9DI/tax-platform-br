@@ -96,8 +96,8 @@ async function eventHistory(
   return result.rows as EventRow[];
 }
 
-function deriveSemesterState(history: EventRow[]) {
-  let model: Model = "simples_puro";
+function deriveSemesterState(history: EventRow[], initialModel: Model = "simples_puro") {
+  let model: Model = initialModel;
   let terminal = false;
 
   for (const event of history) {
@@ -154,7 +154,13 @@ export async function getEffectiveIbsCbsOption(
   const currentHistory = await eventHistory(db, companyId, effectiveFrom, effectiveTo, decisionAt);
 
   const priorState = priorHistory.length ? deriveSemesterState(priorHistory) : { model: "simples_puro" as Model, terminal: false };
-  const currentState = currentHistory.length ? deriveSemesterState(currentHistory) : { model: "simples_puro" as Model, terminal: false };
+  const initialCurrentModel: Model =
+    semester === "second" && priorState.model === "simples_hibrido"
+      ? "simples_hibrido"
+      : "simples_puro";
+  const currentState = currentHistory.length
+    ? deriveSemesterState(currentHistory, initialCurrentModel)
+    : { model: initialCurrentModel, terminal: false };
 
   const previousSemesterModel =
     semester === "second" && priorState.model === "simples_hibrido"
