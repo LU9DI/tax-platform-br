@@ -46,7 +46,7 @@ test(
         companyId, eventType: "elected", period: "2027-01-15", ruleVersionId,
         now: new Date("2026-09-15T12:00:00Z"),
       });
-      const elected = await getEffectiveIbsCbsOption(companyId, "2027-01-15", rule);
+      const elected = await getEffectiveIbsCbsOption(companyId, "2027-01-15", rule, new Date("2026-09-16T12:00:00Z"));
       assert.equal(elected.model, "simples_hibrido");
 
       await recordIbsCbsOptionEvent({
