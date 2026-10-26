@@ -5,6 +5,21 @@ import { randomUUID } from "node:crypto";
 import { getEffectiveIbsCbsOption, recordIbsCbsOptionEvent } from "../src/services/ibsCbsOptionService.js";
 
 const databaseUrl = process.env.TAX_TEST_DATABASE_URL;
+async function createIsolatedCompany(pool: pg.Pool): Promise<string> {
+  const id = randomUUID();
+  const result = await pool.query(
+    `INSERT INTO tax_companies (id, user_id, legal_name, regime)
+     SELECT $1, user_id, $2, regime
+     FROM tax_companies
+     ORDER BY created_at
+     LIMIT 1
+     RETURNING id`,
+    [id, `CI IBS/CBS ${id}`],
+  );
+  if (!result.rowCount) throw new Error("Cannot create isolated IBS/CBS test company: no seeded tax company/user");
+  return result.rows[0].id as string;
+}
+
 
 test(
   "IBS/CBS option state: pure default, hybrid election, cancellation, and second-semester continuity",
@@ -12,9 +27,7 @@ test(
   async () => {
     const pool = new pg.Pool({ connectionString: databaseUrl });
     try {
-      const seed = await pool.query("SELECT id FROM tax_companies LIMIT 1");
-      assert.equal(seed.rowCount, 1);
-      const companyId = seed.rows[0].id as string;
+      const companyId = await createIsolatedCompany(pool);
       const ruleResult = await pool.query(
         "SELECT id, parameters FROM tax_rules WHERE code='SIMPLES_NACIONAL_IBS_CBS_OPTIONS_2027' AND active=true ORDER BY version DESC LIMIT 1",
       );
@@ -43,18 +56,14 @@ test(
       const cancelled = await getEffectiveIbsCbsOption(companyId, "2027-01-15", rule);
       assert.equal(cancelled.model, "simples_puro");
 
-      const isolatedCompany = (await pool.query(
-        "SELECT id FROM tax_companies WHERE id <> $1 LIMIT 1", [companyId],
-      )).rows[0]?.id as string | undefined;
-      if (isolatedCompany) {
-        await recordIbsCbsOptionEvent({
-          companyId: isolatedCompany, eventType: "elected", period: "2027-01-15", ruleVersionId,
-          now: new Date("2026-09-15T12:00:00Z"),
-        });
-        const continued = await getEffectiveIbsCbsOption(isolatedCompany, "2027-07-15", rule);
-        assert.equal(continued.model, "simples_hibrido");
-        assert.equal(continued.previousSemesterModel, "simples_hibrido");
-      }
+      const isolatedCompany = await createIsolatedCompany(pool);
+      await recordIbsCbsOptionEvent({
+        companyId: isolatedCompany, eventType: "elected", period: "2027-01-15", ruleVersionId,
+        now: new Date("2026-09-15T12:00:00Z"),
+      });
+      const continued = await getEffectiveIbsCbsOption(isolatedCompany, "2027-07-15", rule);
+      assert.equal(continued.model, "simples_hibrido");
+      assert.equal(continued.previousSemesterModel, "simples_hibrido");
 
       await assert.rejects(
         recordIbsCbsOptionEvent({
@@ -84,12 +93,10 @@ test(
   async () => {
     const pool = new pg.Pool({ connectionString: databaseUrl });
     try {
-      const seed = await pool.query("SELECT id FROM tax_companies LIMIT 1");
-      assert.equal(seed.rowCount, 1);
-      const companyId = seed.rows[0].id as string;
+      const companyId = await createIsolatedCompany(pool);
       const ruleResult = await pool.query("SELECT id FROM tax_rules WHERE code='SIMPLES_NACIONAL_IBS_CBS_OPTIONS_2027' AND active=true ORDER BY version DESC LIMIT 1");
       assert.equal(ruleResult.rowCount, 1);
-      await pool.query("DELETE FROM tax_company_ibs_cbs_option_events WHERE company_id=$1", [companyId]);
+
       const ruleVersionId = ruleResult.rows[0].id as string;
       await assert.rejects(
         recordIbsCbsOptionEvent({
@@ -111,9 +118,7 @@ test(
   async () => {
     const pool = new pg.Pool({ connectionString: databaseUrl });
     try {
-      const seed = await pool.query("SELECT id FROM tax_companies LIMIT 1");
-      assert.equal(seed.rowCount, 1);
-      const companyId = seed.rows[0].id as string;
+      const companyId = await createIsolatedCompany(pool);
       const ruleResult = await pool.query("SELECT id FROM tax_rules WHERE code='SIMPLES_NACIONAL_IBS_CBS_OPTIONS_2027' AND active=true ORDER BY version DESC LIMIT 1");
       assert.equal(ruleResult.rowCount, 1);
       await assert.rejects(
@@ -136,9 +141,7 @@ test(
   async () => {
     const pool = new pg.Pool({ connectionString: databaseUrl });
     try {
-      const seed = await pool.query("SELECT id FROM tax_companies LIMIT 1");
-      assert.equal(seed.rowCount, 1);
-      const companyId = seed.rows[0].id as string;
+      const companyId = await createIsolatedCompany(pool);
       const ruleResult = await pool.query("SELECT id, parameters FROM tax_rules WHERE code='SIMPLES_NACIONAL_IBS_CBS_OPTIONS_2027' AND active=true ORDER BY version DESC LIMIT 1");
       assert.equal(ruleResult.rowCount, 1);
       const rule = ruleResult.rows[0].parameters;
@@ -176,9 +179,7 @@ test(
   async () => {
     const pool = new pg.Pool({ connectionString: databaseUrl });
     try {
-      const seed = await pool.query("SELECT id FROM tax_companies LIMIT 1");
-      assert.equal(seed.rowCount, 1);
-      const companyId = seed.rows[0].id as string;
+      const companyId = await createIsolatedCompany(pool);
       const ruleResult = await pool.query("SELECT id FROM tax_rules WHERE code='SIMPLES_NACIONAL_IBS_CBS_OPTIONS_2027' AND active=true ORDER BY version DESC LIMIT 1");
       assert.equal(ruleResult.rowCount, 1);
       const ruleVersionId = ruleResult.rows[0].id as string;
@@ -200,14 +201,11 @@ test(
   async () => {
     const pool = new pg.Pool({ connectionString: databaseUrl });
     try {
-      const seed = await pool.query("SELECT id FROM tax_companies LIMIT 1");
-      assert.equal(seed.rowCount, 1);
-      const companyId = seed.rows[0].id as string;
+      const companyId = await createIsolatedCompany(pool);
       const ruleResult = await pool.query("SELECT id, parameters FROM tax_rules WHERE code='SIMPLES_NACIONAL_IBS_CBS_OPTIONS_2027' AND active=true ORDER BY version DESC LIMIT 1");
       assert.equal(ruleResult.rowCount, 1);
       const rule = ruleResult.rows[0].parameters;
       const ruleVersionId = ruleResult.rows[0].id as string;
-      await pool.query("DELETE FROM tax_company_ibs_cbs_option_events WHERE company_id=$1", [companyId]);
 
       await recordIbsCbsOptionEvent({
         companyId, eventType: "elected", period: "2027-07-15", ruleVersionId,
@@ -229,14 +227,11 @@ test(
   async () => {
     const pool = new pg.Pool({ connectionString: databaseUrl });
     try {
-      const seed = await pool.query("SELECT id FROM tax_companies LIMIT 1");
-      assert.equal(seed.rowCount, 1);
-      const companyId = seed.rows[0].id as string;
+      const companyId = await createIsolatedCompany(pool);
       const ruleResult = await pool.query("SELECT id, parameters FROM tax_rules WHERE code='SIMPLES_NACIONAL_IBS_CBS_OPTIONS_2027' AND active=true ORDER BY version DESC LIMIT 1");
       assert.equal(ruleResult.rowCount, 1);
       const rule = ruleResult.rows[0].parameters;
       const ruleVersionId = ruleResult.rows[0].id as string;
-      await pool.query("DELETE FROM tax_company_ibs_cbs_option_events WHERE company_id=$1", [companyId]);
 
       await recordIbsCbsOptionEvent({
         companyId, eventType: "elected", period: "2027-01-15", ruleVersionId,
@@ -269,13 +264,10 @@ test(
   async () => {
     const pool = new pg.Pool({ connectionString: databaseUrl });
     try {
-      const seed = await pool.query("SELECT id FROM tax_companies LIMIT 1");
-      assert.equal(seed.rowCount, 1);
-      const companyId = seed.rows[0].id as string;
+      const companyId = await createIsolatedCompany(pool);
       const ruleResult = await pool.query("SELECT id FROM tax_rules WHERE code='SIMPLES_NACIONAL_IBS_CBS_OPTIONS_2027' AND active=true ORDER BY version DESC LIMIT 1");
       assert.equal(ruleResult.rowCount, 1);
       const ruleVersionId = ruleResult.rows[0].id as string;
-      await pool.query("DELETE FROM tax_company_ibs_cbs_option_events WHERE company_id=$1", [companyId]);
 
       const firstId = await recordIbsCbsOptionEvent({
         companyId, eventType: "elected", period: "2027-01-15", ruleVersionId,
@@ -305,14 +297,11 @@ test(
   async () => {
     const pool = new pg.Pool({ connectionString: databaseUrl });
     try {
-      const seed = await pool.query("SELECT id FROM tax_companies LIMIT 1");
-      assert.equal(seed.rowCount, 1);
-      const companyId = seed.rows[0].id as string;
+      const companyId = await createIsolatedCompany(pool);
       const ruleResult = await pool.query("SELECT id, parameters FROM tax_rules WHERE code='SIMPLES_NACIONAL_IBS_CBS_OPTIONS_2027' AND active=true ORDER BY version DESC LIMIT 1");
       assert.equal(ruleResult.rowCount, 1);
       const rule = ruleResult.rows[0].parameters;
       const ruleVersionId = ruleResult.rows[0].id as string;
-      await pool.query("DELETE FROM tax_company_ibs_cbs_option_events WHERE company_id=$1", [companyId]);
 
       await recordIbsCbsOptionEvent({
         companyId, eventType: "elected", period: "2027-07-15", ruleVersionId,
@@ -325,7 +314,6 @@ test(
       const cancelledElection = await getEffectiveIbsCbsOption(companyId, "2027-07-15", rule);
       assert.equal(cancelledElection.model, "simples_puro");
 
-      await pool.query("DELETE FROM tax_company_ibs_cbs_option_events WHERE company_id=$1", [companyId]);
       await recordIbsCbsOptionEvent({
         companyId, eventType: "elected", period: "2027-01-15", ruleVersionId,
         now: new Date("2026-09-15T12:00:00Z"),
