@@ -78,7 +78,7 @@ test(
       await assert.rejects(
         recordIbsCbsOptionEvent({
           companyId: lateSecondSemesterCompany, eventType: "elected", period: "2027-08-01", ruleVersionId,
-          now: new Date("2027-04-01T12:00:00Z"),
+          now: new Date("2027-06-01T12:00:00Z"),
         }),
         /election window has closed/,
       );
