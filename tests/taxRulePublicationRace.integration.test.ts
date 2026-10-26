@@ -67,7 +67,7 @@ test(
         `INSERT INTO tax_rules
           (id, code, version, active, effective_from, effective_to,
            tax_year, name, source_url, source_reference, parameters)
-         VALUES ($1,$2,$3,true,$4,$5,$6,$7,$8,$9,$10)`,
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
         [
           yId, x.code, nextVersion, true,
           yEffectiveFrom, null, x.tax_year,
