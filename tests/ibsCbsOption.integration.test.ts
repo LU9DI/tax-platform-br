@@ -39,7 +39,7 @@ test(
       assert.deepEqual(rule.start_of_activity.ibs_cbs_cnpj_registration_window, { start: "2026-10-31", end: "2026-12-31" });
       assert.equal(rule.start_of_activity.effect_basis, "cnpj_registration_for_ibs_cbs");
 
-      const before = await getEffectiveIbsCbsOption(companyId, "2027-01-15", rule);
+      const before = await getEffectiveIbsCbsOption(companyId, "2027-01-15", rule, new Date("2026-09-14T12:00:00Z"));
       assert.equal(before.model, "simples_puro");
 
       await recordIbsCbsOptionEvent({
@@ -53,7 +53,7 @@ test(
         companyId, eventType: "cancelled", period: "2027-01-15", ruleVersionId,
         now: new Date("2026-11-15T12:00:00Z"),
       });
-      const cancelled = await getEffectiveIbsCbsOption(companyId, "2027-01-15", rule);
+      const cancelled = await getEffectiveIbsCbsOption(companyId, "2027-01-15", rule, new Date("2026-11-16T12:00:00Z"));
       assert.equal(cancelled.model, "simples_puro");
 
       const isolatedCompany = await createIsolatedCompany(pool);
@@ -61,7 +61,7 @@ test(
         companyId: isolatedCompany, eventType: "elected", period: "2027-01-15", ruleVersionId,
         now: new Date("2026-09-15T12:00:00Z"),
       });
-      const continued = await getEffectiveIbsCbsOption(isolatedCompany, "2027-07-15", rule);
+      const continued = await getEffectiveIbsCbsOption(isolatedCompany, "2027-07-15", rule, new Date("2026-09-16T12:00:00Z"));
       assert.equal(continued.model, "simples_hibrido");
       assert.equal(continued.previousSemesterModel, "simples_hibrido");
 
@@ -121,9 +121,14 @@ test(
       const companyId = await createIsolatedCompany(pool);
       const ruleResult = await pool.query("SELECT id FROM tax_rules WHERE code='SIMPLES_NACIONAL_IBS_CBS_OPTIONS_2027' AND active=true ORDER BY version DESC LIMIT 1");
       assert.equal(ruleResult.rowCount, 1);
+      const ruleVersionId = ruleResult.rows[0].id as string;
+      await recordIbsCbsOptionEvent({
+        companyId, eventType: "elected", period: "2027-01-15", ruleVersionId,
+        now: new Date("2026-09-15T12:00:00Z"),
+      });
       await assert.rejects(
         recordIbsCbsOptionEvent({
-          companyId, eventType: "cancelled", period: "2027-01-15", ruleVersionId: ruleResult.rows[0].id as string,
+          companyId, eventType: "cancelled", period: "2027-01-15", ruleVersionId,
           now: new Date("2026-11-02T12:00:00Z"),
         }),
         /cancellation window is closed/,
@@ -164,7 +169,7 @@ test(
         companyId, eventType: "renounced", period: "2027-08-01", ruleVersionId,
         now: new Date("2027-03-15T12:00:00Z"),
       });
-      const state = await getEffectiveIbsCbsOption(companyId, "2027-08-01", rule);
+      const state = await getEffectiveIbsCbsOption(companyId, "2027-08-01", rule, new Date("2027-03-16T12:00:00Z"));
       assert.equal(state.model, "simples_puro");
     } finally {
       await pool.end();
@@ -211,7 +216,7 @@ test(
         companyId, eventType: "elected", period: "2027-07-15", ruleVersionId,
         now: new Date("2027-03-15T12:00:00Z"),
       });
-      const state = await getEffectiveIbsCbsOption(companyId, "2027-07-15", rule);
+      const state = await getEffectiveIbsCbsOption(companyId, "2027-07-15", rule, new Date("2027-03-16T12:00:00Z"));
       assert.equal(state.model, "simples_hibrido");
       assert.equal(state.previousSemesterModel, undefined);
     } finally {
@@ -242,14 +247,14 @@ test(
         now: new Date("2026-11-15T12:00:00Z"),
       });
 
-      const afterCancellation = await getEffectiveIbsCbsOption(companyId, "2027-07-15", rule);
+      const afterCancellation = await getEffectiveIbsCbsOption(companyId, "2027-07-15", rule, new Date("2027-03-16T12:00:00Z"));
       assert.equal(afterCancellation.model, "simples_puro");
 
       await recordIbsCbsOptionEvent({
         companyId, eventType: "elected", period: "2027-07-15", ruleVersionId,
         now: new Date("2027-03-15T12:00:00Z"),
       });
-      const reElected = await getEffectiveIbsCbsOption(companyId, "2027-07-15", rule);
+      const reElected = await getEffectiveIbsCbsOption(companyId, "2027-07-15", rule, new Date("2027-03-16T12:00:00Z"));
       assert.equal(reElected.model, "simples_hibrido");
     } finally {
       await pool.end();
@@ -311,7 +316,7 @@ test(
         companyId, eventType: "cancelled", period: "2027-07-15", ruleVersionId,
         now: new Date("2027-05-31T12:00:00Z"),
       });
-      const cancelledElection = await getEffectiveIbsCbsOption(companyId, "2027-07-15", rule);
+      const cancelledElection = await getEffectiveIbsCbsOption(companyId, "2027-07-15", rule, new Date("2027-06-01T12:00:00Z"));
       assert.equal(cancelledElection.model, "simples_puro");
 
       await recordIbsCbsOptionEvent({
@@ -326,7 +331,7 @@ test(
         companyId, eventType: "cancelled", period: "2027-07-15", ruleVersionId,
         now: new Date("2027-05-31T12:00:00Z"),
       });
-      const cancelledRenunciation = await getEffectiveIbsCbsOption(companyId, "2027-07-15", rule);
+      const cancelledRenunciation = await getEffectiveIbsCbsOption(companyId, "2027-07-15", rule, new Date("2027-06-01T12:00:00Z"));
       assert.equal(cancelledRenunciation.model, "simples_hibrido");
     } finally {
       await pool.end();
