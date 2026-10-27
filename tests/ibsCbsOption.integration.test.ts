@@ -5,6 +5,21 @@ import { randomUUID } from "node:crypto";
 import { getEffectiveIbsCbsOption, recordIbsCbsOptionEvent } from "../src/services/ibsCbsOptionService.js";
 
 const databaseUrl = process.env.TAX_TEST_DATABASE_URL;
+async function createIsolatedCompany(pool: pg.Pool): Promise<string> {
+  const id = randomUUID();
+  const result = await pool.query(
+    `INSERT INTO tax_companies (id, user_id, legal_name, regime)
+     SELECT $1, user_id, $2, regime
+     FROM tax_companies
+     ORDER BY created_at
+     LIMIT 1
+     RETURNING id`,
+    [id, `CI IBS/CBS ${id}`],
+  );
+  if (!result.rowCount) throw new Error("Cannot create isolated IBS/CBS test company: no seeded tax company/user");
+  return result.rows[0].id as string;
+}
+
 
 test(
   "IBS/CBS option state: pure default, hybrid election, cancellation, and second-semester continuity",
@@ -12,9 +27,7 @@ test(
   async () => {
     const pool = new pg.Pool({ connectionString: databaseUrl });
     try {
-      const seed = await pool.query("SELECT id FROM tax_companies LIMIT 1");
-      assert.equal(seed.rowCount, 1);
-      const companyId = seed.rows[0].id as string;
+      const companyId = await createIsolatedCompany(pool);
       const ruleResult = await pool.query(
         "SELECT id, parameters FROM tax_rules WHERE code='SIMPLES_NACIONAL_IBS_CBS_OPTIONS_2027' AND active=true ORDER BY version DESC LIMIT 1",
       );
@@ -26,48 +39,46 @@ test(
       assert.deepEqual(rule.start_of_activity.ibs_cbs_cnpj_registration_window, { start: "2026-10-31", end: "2026-12-31" });
       assert.equal(rule.start_of_activity.effect_basis, "cnpj_registration_for_ibs_cbs");
 
-      const before = await getEffectiveIbsCbsOption(companyId, "2027-01-15", rule);
+      const before = await getEffectiveIbsCbsOption(companyId, "2027-01-15", rule, new Date("2026-09-14T12:00:00Z"));
       assert.equal(before.model, "simples_puro");
 
       await recordIbsCbsOptionEvent({
         companyId, eventType: "elected", period: "2027-01-15", ruleVersionId,
         now: new Date("2026-09-15T12:00:00Z"),
       });
-      const elected = await getEffectiveIbsCbsOption(companyId, "2027-01-15", rule);
+      const elected = await getEffectiveIbsCbsOption(companyId, "2027-01-15", rule, new Date("2026-09-16T12:00:00Z"));
       assert.equal(elected.model, "simples_hibrido");
 
       await recordIbsCbsOptionEvent({
         companyId, eventType: "cancelled", period: "2027-01-15", ruleVersionId,
         now: new Date("2026-11-15T12:00:00Z"),
       });
-      const cancelled = await getEffectiveIbsCbsOption(companyId, "2027-01-15", rule);
+      const cancelled = await getEffectiveIbsCbsOption(companyId, "2027-01-15", rule, new Date("2026-11-16T12:00:00Z"));
       assert.equal(cancelled.model, "simples_puro");
 
-      const isolatedCompany = (await pool.query(
-        "SELECT id FROM tax_companies WHERE id <> $1 LIMIT 1", [companyId],
-      )).rows[0]?.id as string | undefined;
-      if (isolatedCompany) {
-        await recordIbsCbsOptionEvent({
-          companyId: isolatedCompany, eventType: "elected", period: "2027-01-15", ruleVersionId,
-          now: new Date("2026-09-15T12:00:00Z"),
-        });
-        const continued = await getEffectiveIbsCbsOption(isolatedCompany, "2027-07-15", rule);
-        assert.equal(continued.model, "simples_hibrido");
-        assert.equal(continued.previousSemesterModel, "simples_hibrido");
-      }
+      const isolatedCompany = await createIsolatedCompany(pool);
+      await recordIbsCbsOptionEvent({
+        companyId: isolatedCompany, eventType: "elected", period: "2027-01-15", ruleVersionId,
+        now: new Date("2026-09-15T12:00:00Z"),
+      });
+      const continued = await getEffectiveIbsCbsOption(isolatedCompany, "2027-07-15", rule, new Date("2026-09-16T12:00:00Z"));
+      assert.equal(continued.model, "simples_hibrido");
+      assert.equal(continued.previousSemesterModel, "simples_hibrido");
 
+      const lateFirstSemesterCompany = await createIsolatedCompany(pool);
       await assert.rejects(
         recordIbsCbsOptionEvent({
-          companyId, eventType: "elected", period: "2027-01-15", ruleVersionId,
-          now: new Date("2026-10-01T12:00:00Z"),
+          companyId: lateFirstSemesterCompany, eventType: "elected", period: "2027-01-15", ruleVersionId,
+          now: new Date("2026-11-01T12:00:00Z"),
         }),
         /election window has closed/,
       );
 
+      const lateSecondSemesterCompany = await createIsolatedCompany(pool);
       await assert.rejects(
         recordIbsCbsOptionEvent({
-          companyId, eventType: "elected", period: "2027-08-01", ruleVersionId,
-          now: new Date("2027-04-01T12:00:00Z"),
+          companyId: lateSecondSemesterCompany, eventType: "elected", period: "2027-08-01", ruleVersionId,
+          now: new Date("2027-06-01T12:00:00Z"),
         }),
         /election window has closed/,
       );
@@ -84,12 +95,10 @@ test(
   async () => {
     const pool = new pg.Pool({ connectionString: databaseUrl });
     try {
-      const seed = await pool.query("SELECT id FROM tax_companies LIMIT 1");
-      assert.equal(seed.rowCount, 1);
-      const companyId = seed.rows[0].id as string;
+      const companyId = await createIsolatedCompany(pool);
       const ruleResult = await pool.query("SELECT id FROM tax_rules WHERE code='SIMPLES_NACIONAL_IBS_CBS_OPTIONS_2027' AND active=true ORDER BY version DESC LIMIT 1");
       assert.equal(ruleResult.rowCount, 1);
-      await pool.query("DELETE FROM tax_company_ibs_cbs_option_events WHERE company_id=$1", [companyId]);
+
       const ruleVersionId = ruleResult.rows[0].id as string;
       await assert.rejects(
         recordIbsCbsOptionEvent({
@@ -111,14 +120,17 @@ test(
   async () => {
     const pool = new pg.Pool({ connectionString: databaseUrl });
     try {
-      const seed = await pool.query("SELECT id FROM tax_companies LIMIT 1");
-      assert.equal(seed.rowCount, 1);
-      const companyId = seed.rows[0].id as string;
+      const companyId = await createIsolatedCompany(pool);
       const ruleResult = await pool.query("SELECT id FROM tax_rules WHERE code='SIMPLES_NACIONAL_IBS_CBS_OPTIONS_2027' AND active=true ORDER BY version DESC LIMIT 1");
       assert.equal(ruleResult.rowCount, 1);
+      const ruleVersionId = ruleResult.rows[0].id as string;
+      await recordIbsCbsOptionEvent({
+        companyId, eventType: "elected", period: "2027-01-15", ruleVersionId,
+        now: new Date("2026-09-15T12:00:00Z"),
+      });
       await assert.rejects(
         recordIbsCbsOptionEvent({
-          companyId, eventType: "cancelled", period: "2027-01-15", ruleVersionId: ruleResult.rows[0].id as string,
+          companyId, eventType: "cancelled", period: "2027-01-15", ruleVersionId,
           now: new Date("2026-11-02T12:00:00Z"),
         }),
         /cancellation window is closed/,
@@ -136,9 +148,7 @@ test(
   async () => {
     const pool = new pg.Pool({ connectionString: databaseUrl });
     try {
-      const seed = await pool.query("SELECT id FROM tax_companies LIMIT 1");
-      assert.equal(seed.rowCount, 1);
-      const companyId = seed.rows[0].id as string;
+      const companyId = await createIsolatedCompany(pool);
       const ruleResult = await pool.query("SELECT id, parameters FROM tax_rules WHERE code='SIMPLES_NACIONAL_IBS_CBS_OPTIONS_2027' AND active=true ORDER BY version DESC LIMIT 1");
       assert.equal(ruleResult.rowCount, 1);
       const rule = ruleResult.rows[0].parameters;
@@ -161,7 +171,7 @@ test(
         companyId, eventType: "renounced", period: "2027-08-01", ruleVersionId,
         now: new Date("2027-03-15T12:00:00Z"),
       });
-      const state = await getEffectiveIbsCbsOption(companyId, "2027-08-01", rule);
+      const state = await getEffectiveIbsCbsOption(companyId, "2027-08-01", rule, new Date("2027-03-16T12:00:00Z"));
       assert.equal(state.model, "simples_puro");
     } finally {
       await pool.end();
@@ -176,9 +186,7 @@ test(
   async () => {
     const pool = new pg.Pool({ connectionString: databaseUrl });
     try {
-      const seed = await pool.query("SELECT id FROM tax_companies LIMIT 1");
-      assert.equal(seed.rowCount, 1);
-      const companyId = seed.rows[0].id as string;
+      const companyId = await createIsolatedCompany(pool);
       const ruleResult = await pool.query("SELECT id FROM tax_rules WHERE code='SIMPLES_NACIONAL_IBS_CBS_OPTIONS_2027' AND active=true ORDER BY version DESC LIMIT 1");
       assert.equal(ruleResult.rowCount, 1);
       const ruleVersionId = ruleResult.rows[0].id as string;
@@ -200,22 +208,19 @@ test(
   async () => {
     const pool = new pg.Pool({ connectionString: databaseUrl });
     try {
-      const seed = await pool.query("SELECT id FROM tax_companies LIMIT 1");
-      assert.equal(seed.rowCount, 1);
-      const companyId = seed.rows[0].id as string;
+      const companyId = await createIsolatedCompany(pool);
       const ruleResult = await pool.query("SELECT id, parameters FROM tax_rules WHERE code='SIMPLES_NACIONAL_IBS_CBS_OPTIONS_2027' AND active=true ORDER BY version DESC LIMIT 1");
       assert.equal(ruleResult.rowCount, 1);
       const rule = ruleResult.rows[0].parameters;
       const ruleVersionId = ruleResult.rows[0].id as string;
-      await pool.query("DELETE FROM tax_company_ibs_cbs_option_events WHERE company_id=$1", [companyId]);
 
       await recordIbsCbsOptionEvent({
         companyId, eventType: "elected", period: "2027-07-15", ruleVersionId,
         now: new Date("2027-03-15T12:00:00Z"),
       });
-      const state = await getEffectiveIbsCbsOption(companyId, "2027-07-15", rule);
+      const state = await getEffectiveIbsCbsOption(companyId, "2027-07-15", rule, new Date("2027-03-16T12:00:00Z"));
       assert.equal(state.model, "simples_hibrido");
-      assert.equal(state.previousSemesterModel, undefined);
+      assert.equal(state.previousSemesterModel, "simples_puro");
     } finally {
       await pool.end();
     }
@@ -229,14 +234,11 @@ test(
   async () => {
     const pool = new pg.Pool({ connectionString: databaseUrl });
     try {
-      const seed = await pool.query("SELECT id FROM tax_companies LIMIT 1");
-      assert.equal(seed.rowCount, 1);
-      const companyId = seed.rows[0].id as string;
+      const companyId = await createIsolatedCompany(pool);
       const ruleResult = await pool.query("SELECT id, parameters FROM tax_rules WHERE code='SIMPLES_NACIONAL_IBS_CBS_OPTIONS_2027' AND active=true ORDER BY version DESC LIMIT 1");
       assert.equal(ruleResult.rowCount, 1);
       const rule = ruleResult.rows[0].parameters;
       const ruleVersionId = ruleResult.rows[0].id as string;
-      await pool.query("DELETE FROM tax_company_ibs_cbs_option_events WHERE company_id=$1", [companyId]);
 
       await recordIbsCbsOptionEvent({
         companyId, eventType: "elected", period: "2027-01-15", ruleVersionId,
@@ -247,14 +249,14 @@ test(
         now: new Date("2026-11-15T12:00:00Z"),
       });
 
-      const afterCancellation = await getEffectiveIbsCbsOption(companyId, "2027-07-15", rule);
+      const afterCancellation = await getEffectiveIbsCbsOption(companyId, "2027-07-15", rule, new Date("2027-03-16T12:00:00Z"));
       assert.equal(afterCancellation.model, "simples_puro");
 
       await recordIbsCbsOptionEvent({
         companyId, eventType: "elected", period: "2027-07-15", ruleVersionId,
         now: new Date("2027-03-15T12:00:00Z"),
       });
-      const reElected = await getEffectiveIbsCbsOption(companyId, "2027-07-15", rule);
+      const reElected = await getEffectiveIbsCbsOption(companyId, "2027-07-15", rule, new Date("2027-03-16T12:00:00Z"));
       assert.equal(reElected.model, "simples_hibrido");
     } finally {
       await pool.end();
@@ -269,13 +271,10 @@ test(
   async () => {
     const pool = new pg.Pool({ connectionString: databaseUrl });
     try {
-      const seed = await pool.query("SELECT id FROM tax_companies LIMIT 1");
-      assert.equal(seed.rowCount, 1);
-      const companyId = seed.rows[0].id as string;
+      const companyId = await createIsolatedCompany(pool);
       const ruleResult = await pool.query("SELECT id FROM tax_rules WHERE code='SIMPLES_NACIONAL_IBS_CBS_OPTIONS_2027' AND active=true ORDER BY version DESC LIMIT 1");
       assert.equal(ruleResult.rowCount, 1);
       const ruleVersionId = ruleResult.rows[0].id as string;
-      await pool.query("DELETE FROM tax_company_ibs_cbs_option_events WHERE company_id=$1", [companyId]);
 
       const firstId = await recordIbsCbsOptionEvent({
         companyId, eventType: "elected", period: "2027-01-15", ruleVersionId,
@@ -305,14 +304,11 @@ test(
   async () => {
     const pool = new pg.Pool({ connectionString: databaseUrl });
     try {
-      const seed = await pool.query("SELECT id FROM tax_companies LIMIT 1");
-      assert.equal(seed.rowCount, 1);
-      const companyId = seed.rows[0].id as string;
+      const companyId = await createIsolatedCompany(pool);
       const ruleResult = await pool.query("SELECT id, parameters FROM tax_rules WHERE code='SIMPLES_NACIONAL_IBS_CBS_OPTIONS_2027' AND active=true ORDER BY version DESC LIMIT 1");
       assert.equal(ruleResult.rowCount, 1);
       const rule = ruleResult.rows[0].parameters;
       const ruleVersionId = ruleResult.rows[0].id as string;
-      await pool.query("DELETE FROM tax_company_ibs_cbs_option_events WHERE company_id=$1", [companyId]);
 
       await recordIbsCbsOptionEvent({
         companyId, eventType: "elected", period: "2027-07-15", ruleVersionId,
@@ -322,23 +318,23 @@ test(
         companyId, eventType: "cancelled", period: "2027-07-15", ruleVersionId,
         now: new Date("2027-05-31T12:00:00Z"),
       });
-      const cancelledElection = await getEffectiveIbsCbsOption(companyId, "2027-07-15", rule);
+      const cancelledElection = await getEffectiveIbsCbsOption(companyId, "2027-07-15", rule, new Date("2027-06-01T12:00:00Z"));
       assert.equal(cancelledElection.model, "simples_puro");
 
-      await pool.query("DELETE FROM tax_company_ibs_cbs_option_events WHERE company_id=$1", [companyId]);
+      const renunciationCompany = await createIsolatedCompany(pool);
       await recordIbsCbsOptionEvent({
-        companyId, eventType: "elected", period: "2027-01-15", ruleVersionId,
+        companyId: renunciationCompany, eventType: "elected", period: "2027-01-15", ruleVersionId,
         now: new Date("2026-09-15T12:00:00Z"),
       });
       await recordIbsCbsOptionEvent({
-        companyId, eventType: "renounced", period: "2027-07-15", ruleVersionId,
+        companyId: renunciationCompany, eventType: "renounced", period: "2027-07-15", ruleVersionId,
         now: new Date("2027-03-15T12:00:00Z"),
       });
       await recordIbsCbsOptionEvent({
-        companyId, eventType: "cancelled", period: "2027-07-15", ruleVersionId,
+        companyId: renunciationCompany, eventType: "cancelled", period: "2027-07-15", ruleVersionId,
         now: new Date("2027-05-31T12:00:00Z"),
       });
-      const cancelledRenunciation = await getEffectiveIbsCbsOption(companyId, "2027-07-15", rule);
+      const cancelledRenunciation = await getEffectiveIbsCbsOption(renunciationCompany, "2027-07-15", rule, new Date("2027-06-01T12:00:00Z"));
       assert.equal(cancelledRenunciation.model, "simples_hibrido");
     } finally {
       await pool.end();
