@@ -7,6 +7,7 @@ import { initDb } from "../core/db.js";
 import { requireAuth } from "../middleware/auth.js";
 import { calculationRateLimit } from "../middleware/calculationRateLimit.js";
 import { recordTaxCalculation, getEffectiveTaxRule } from "../services/taxAuditService.js";
+import { getProvisionalRuleInfo, ProvisionalRuleInfo } from "../core/provisionalRule.js";
 const router=Router();
 const parseLimit=(v:unknown)=>{const n=Number(v??20);return Number.isInteger(n)&&n>=1&&n<=100?n:20;};
 const parseOffset=(v:unknown)=>{const n=Number(v??0);return Number.isInteger(n)&&n>=0&&n<=100000?n:0;};
@@ -30,7 +31,8 @@ router.post("/mei/load",requireAuth,calculationRateLimit,async(req,res)=>{try{
  if(!companyId)return res.status(400).json({error:"companyId is required for audited calculations"});
  const ownership=await initDb().query("SELECT id,opened_at FROM tax_companies WHERE id=$1 AND user_id=$2",[companyId,(req as any).userId]);
  if(!ownership.rowCount)return res.status(403).json({error:"company not found or not owned by user"});
- const enriched={...output,ruleVersion:{id:rule.id,code:rule.rule_code,version:rule.version,effectiveFrom:rule.effective_from,effectiveTo:rule.effective_to,sourceUrl:rule.source_url,sourceReference:rule.source_reference,parameters:rule.parameters}};
+ const provisionalInfo = getProvisionalRuleInfo(rule.rule_code, rule.parameters);
+ const enriched={...output,ruleVersion:{id:rule.id,code:rule.rule_code,version:rule.version,effectiveFrom:rule.effective_from,effectiveTo:rule.effective_to,sourceUrl:rule.source_url,sourceReference:rule.source_reference,parameters:rule.parameters},provisional:provisionalInfo.isProvisional,...(provisionalInfo.warning?{provisionalWarning:provisionalInfo.warning}:{})};
  if(companyId){const audit=await recordTaxCalculation(companyId,(req as any).userId,"mei_load",req.body,enriched,rule.id,parseIdempotencyKey(req));if(!audit)return res.status(403).json({error:"company not found or not owned by user"});}
  res.json(enriched);
 }catch(e){if(e instanceof Error && (e as Error & {code?:string}).code==="IDEMPOTENCY_CONFLICT")return res.status(409).json({error:e.message});if(e instanceof Error && (e as Error & {code?:string}).code==="54000")return res.status(429).json({error:e.message});res.status(400).json({error:e instanceof Error?e.message:"invalid MEI data"});}});
@@ -43,7 +45,8 @@ router.post("/simulate/consumption-transition",requireAuth,calculationRateLimit,
  const output=simulateConsumptionTransition(input,rule.parameters as any);
  const companyId=typeof req.body?.companyId==="string"&&req.body.companyId.trim()?req.body.companyId.trim():null;
  if(!companyId)return res.status(400).json({error:"companyId is required for audited calculations"});
- const enriched={...output,ruleVersion:{id:rule.id,code:rule.rule_code,version:rule.version,effectiveFrom:rule.effective_from,effectiveTo:rule.effective_to,sourceUrl:rule.source_url,sourceReference:rule.source_reference,parameters:rule.parameters}};
+ const provisionalInfo = getProvisionalRuleInfo(rule.rule_code, rule.parameters);
+ const enriched={...output,ruleVersion:{id:rule.id,code:rule.rule_code,version:rule.version,effectiveFrom:rule.effective_from,effectiveTo:rule.effective_to,sourceUrl:rule.source_url,sourceReference:rule.source_reference,parameters:rule.parameters},provisional:provisionalInfo.isProvisional,...(provisionalInfo.warning?{provisionalWarning:provisionalInfo.warning}:{})};
  if(companyId){const audit=await recordTaxCalculation(companyId,(req as any).userId,"consumption_transition",input,enriched,rule.id,parseIdempotencyKey(req));if(!audit)return res.status(403).json({error:"company not found or not owned by user"});}
  res.json(enriched);
 }catch(e){if(e instanceof Error && (e as Error & {code?:string}).code==="IDEMPOTENCY_CONFLICT")return res.status(409).json({error:e.message});if(e instanceof Error && (e as Error & {code?:string}).code==="54000")return res.status(429).json({error:e.message});res.status(400).json({error:e instanceof Error?e.message:"invalid simulation"});}});
