@@ -67,6 +67,7 @@ app.use((_req, res, next) => {
   res.setHeader("Referrer-Policy", "no-referrer");
   res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
   if (process.env.NODE_ENV === "production") res.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
+  res.setHeader("Content-Security-Policy", process.env.NODE_ENV === "production" ? "default-src 'self' https: data: blob:; style-src 'self' 'unsafe-inline' https: data:; script-src 'self' 'unsafe-inline' https: data: blob:; img-src 'self' data: https:; connect-src https: blob:; frame-src 'none'; base-uri 'self'; object-src 'none'" : "");
   next();
 });
 app.use(metricsMiddleware);
