@@ -19,10 +19,15 @@ function cleanupExpired(now: number) {
   }
 }
 
-export function rateLimit(req: Request, res: Response, next: NextFunction) {
+export function rateLimit(req: Request & { userId?: string }, res: Response, next: NextFunction) {
   const isAuth = req.path.startsWith("/api/auth");
   const max = isAuth ? authMax : apiMax;
-  const key = `${req.ip || "unknown"}|${isAuth ? "auth" : "api"}`;
+  // Try to use user_id from authenticated request for per-user rate limiting
+  // The calculationRateLimit middleware injects userId into req.userId
+  let key = `${req.ip || "unknown"}|${isAuth ? "auth" : "api"}`;
+  if (req.userId && typeof req.userId === "string" && req.userId.length > 0) {
+    key = `${req.userId}|${isAuth ? "auth" : "api"}`;
+  }
   const now = Date.now();
 
   if (buckets.size >= maxBuckets) cleanupExpired(now);
