@@ -1,4 +1,5 @@
-CREATE TABLE IF NOT EXISTS app_users (id UUID PRIMARY KEY,email TEXT UNIQUE NOT NULL,password_hash TEXT NOT NULL,created_at TIMESTAMPTZ NOT NULL DEFAULT now());
+CREATE TABLE IF NOT EXISTS app_users (id UUID PRIMARY KEY,email TEXT UNIQUE NOT NULL,password_hash TEXT NOT NULL,email_verified BOOLEAN NOT NULL DEFAULT false,created_at TIMESTAMPTZ NOT NULL DEFAULT now());
+CREATE TABLE IF NOT EXISTS email_verification_tokens (id UUID PRIMARY KEY,user_id UUID NOT NULL REFERENCES app_users(id) ON DELETE CASCADE,token TEXT NOT NULL UNIQUE,expires_at TIMESTAMPTZ NOT NULL,used BOOLEAN NOT NULL DEFAULT false,created_at TIMESTAMPTZ NOT NULL DEFAULT now());
 ALTER TABLE app_users ADD COLUMN IF NOT EXISTS password_hash TEXT;
 CREATE INDEX IF NOT EXISTS idx_app_users_email ON app_users(email);
 CREATE TABLE IF NOT EXISTS tax_profiles (id UUID PRIMARY KEY,user_id UUID NOT NULL REFERENCES app_users(id) ON DELETE CASCADE,taxpayer_type TEXT NOT NULL CHECK(taxpayer_type IN ('individual','accountant','business')),country TEXT NOT NULL DEFAULT 'BR',state TEXT,tax_year INTEGER NOT NULL,data JSONB NOT NULL DEFAULT '{}'::jsonb,created_at TIMESTAMPTZ NOT NULL DEFAULT now(),updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),UNIQUE(user_id,tax_year));
