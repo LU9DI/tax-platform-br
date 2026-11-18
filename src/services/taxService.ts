@@ -29,8 +29,19 @@ export function calculateMeiLoad(input: MeiLoadInput, rule: MeiRuleParameters) {
   const month = Number(input.month);
   if (!Number.isInteger(month) || month < 1 || month > 12) throw new Error("month must be between 1 and 12");
   const annualLimit = finiteNonNegative(rule?.annual_limit, "MEI annual limit");
+  if (annualLimit <= 0) throw new Error("MEI annual limit must be greater than zero");
   const das = finiteNonNegative(rule?.monthly_das?.[input.activity], "MEI DAS");
-  const startMonth = input.startMonth ? Math.max(1, Math.min(12, Math.floor(input.startMonth))) : 1;
+  const startMonth = input.startMonth ?? 1;
+  if (!Number.isInteger(startMonth) || startMonth < 1 || startMonth > 12) {
+    throw new Error("startMonth must be an integer between 1 and 12");
+  }
+  if (month < startMonth) {
+    throw new Error("month must be on or after startMonth");
+  }
+  const referenceYear = input.year ?? new Date().getUTCFullYear();
+  if (!Number.isInteger(referenceYear) || referenceYear < 1) {
+    throw new Error("year must be a positive integer");
+  }
   const monthsAvailable = 13 - startMonth;
   const proportionalLimit = annualLimit * (monthsAvailable / 12);
   const referenceLimit = startMonth > 1 ? proportionalLimit : annualLimit;
@@ -40,7 +51,7 @@ export function calculateMeiLoad(input: MeiLoadInput, rule: MeiRuleParameters) {
   const monthlySafeRevenue = Math.max(0, remaining / Math.max(1, 12 - month));
 
   return {
-    referenceYear: input.year ?? new Date().getUTCFullYear(),
+    referenceYear,
     annualLimit: referenceLimit,
     revenueYearToDate: revenue,
     remainingLimit: remaining,
