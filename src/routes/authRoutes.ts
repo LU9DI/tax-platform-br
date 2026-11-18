@@ -2,7 +2,8 @@ import { Router } from "express";
 import bcrypt from "bcrypt";
 import { randomUUID } from "node:crypto";
 import { initDb } from "../core/db.js";
-import { issueToken } from "../core/auth.js";
+import { issueToken, verifyTokenWithRevocation, logoutToken } from "../core/auth.js";
+import { requireAuth, requireLogout } from "../middleware/auth.js";
 
 const router = Router();
 const emailOf = (value: unknown) => String(value ?? "").trim().toLowerCase();
@@ -39,6 +40,19 @@ router.post("/login", async (req, res) => {
     return res.json({ user: { id: user.id, email: user.email }, token: issueToken(user.id) });
   } catch {
     return res.status(500).json({ error: "login failed" });
+  }
+});
+
+router.post("/logout", requireAuth, requireLogout, async (req, res) => {
+  const header = req.header("authorization");
+  const token = header?.slice(7).trim();
+  const userId = (req as any).userId;
+  if (!token || !userId) return res.status(401).json({ error: "unauthorized" });
+  try {
+    await logoutToken(userId, token, "logout");
+    return res.json({ message: "logged out successfully" });
+  } catch {
+    return res.status(500).json({ error: "logout failed" });
   }
 });
 

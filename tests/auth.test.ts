@@ -10,14 +10,14 @@ afterEach(() => {
   else process.env.JWT_SECRET = original;
 });
 
-test("issues and verifies a token with a subject", () => {
+test("issues and verifies a token with a subject", async () => {
   const token = issueToken("user-123");
-  const payload = verifyToken(token);
+  const payload = await verifyToken(token);
   assert.equal(payload.sub, "user-123");
 });
 
-test("rejects weak JWT secrets", () => {
+test("rejects weak JWT secrets", async () => {
   process.env.JWT_SECRET = "short";
   assert.throws(() => issueToken("user-123"), /at least 32 characters/);
-  assert.throws(() => verifyToken("not-a-token"), /at least 32 characters/);
+  await assert.rejects(() => verifyToken("not-a-token"), /at least 32 characters/);
 });
